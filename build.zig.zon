@@ -1,0 +1,14 @@
+.{
+    .name = "rocksdb",
+    .version = "9.2.1-1",
+    .dependencies = .{
+        .rocksdb = .{
+            .url = "https://github.com/facebook/rocksdb/archive/refs/tags/v9.2.1.tar.gz",
+            .hash = "122052ab4412134cd51c06cd5607a58089a8c4741822fab6afcb929c19ac37a45e8f",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+}
