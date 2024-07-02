@@ -2,8 +2,8 @@ Build and use RocksDB in zig.
 
 Supported use cases:
 - [⬇️](#build-rocksdb) Build a RocksDB static library using the zig build system.
-- [⬇️](#directly-use-rocksdb-in-a-zig-project) Directly import RocksDB as a normal zig dependency in a zig project.
-- [⬇️](#use-the-zig-bindings-library) Use an idiomatic zig library of bindings that wrap the RocksDB library with hand-written zig code.
+- [⬇️](#import-rocksdb-c-api-in-a-zig-project) Import RocksDB's C API as a normal zig dependency in a zig project.
+- [⬇️](#import-the-zig-bindings-library) Import an idiomatic zig library of bindings that wrap the RocksDB library with hand-written zig code.
 
 In all cases, RocksDB and all of its dependencies are statically linked. This offers portability because it works without needing to dynamically link to any shared libraries in the system.
 
@@ -16,13 +16,13 @@ Clone this repository, then run `zig build`. The `zig-out` directory will contai
 
 You can use these artifacts with any language or build system.
 
-## Directly use RocksDB in a Zig project
+## Import RocksDB C API in a Zig project
 
 Add this to your dependencies in build.zig.zon:
 ```zig
 .rocksdb = .{
-    .url = "https://github.com/Syndica/rocksdb-zig/archive/refs/tags/v9.2.1-1.tar.gz",
-    .hash = "TODO",
+    .url = "https://github.com/Syndica/rocksdb-zig/archive/fa313c2ee5bcacf0c3a822ae64222328e5db0e60.tar.gz",
+    .hash = "1220cb13f4c67b126d05fb7973476cb74542d68a45d812985890d8ce55f1c1e0e1e7",
 },
 ```
 
@@ -37,13 +37,13 @@ Add this to your zig program:
 const rocksdb = @import("rocksdb");
 ```
 
-## Use the Zig Bindings Library
+## Import the Zig bindings library
 
 Add this to your dependencies in build.zig.zon:
 ```zig
 .rocksdb = .{
-    .url = "https://github.com/Syndica/rocksdb-zig/archive/refs/tags/v9.2.1-1.tar.gz",
-    .hash = "TODO",
+    .url = "https://github.com/Syndica/rocksdb-zig/archive/fa313c2ee5bcacf0c3a822ae64222328e5db0e60.tar.gz",
+    .hash = "1220cb13f4c67b126d05fb7973476cb74542d68a45d812985890d8ce55f1c1e0e1e7",
 },
 ```
 
@@ -57,7 +57,6 @@ Add this to your zig program:
 ```zig
 const rocksdb = @import("rocksdb-bindings");
 ```
-
 
 # Build Dependencies
 must be in PATH:
