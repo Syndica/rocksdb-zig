@@ -4,7 +4,7 @@ pub const RawIterator = iterator.RawIterator;
 pub const ColumnFamilyDescription = database.ColumnFamilyDescription;
 pub const ColumnFamily = database.ColumnFamily;
 pub const ColumnFamilyOptions = database.ColumnFamilyOptions;
-pub const Database = database.Database;
+pub const DB = database.DB;
 pub const DBOptions = database.DBOptions;
 pub const LiveFile = database.LiveFile;
 

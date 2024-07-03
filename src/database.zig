@@ -3,8 +3,9 @@ const rdb = @import("rocksdb");
 const lib = @import("lib.zig");
 
 const Allocator = std.mem.Allocator;
+const DefaultRwLock = std.Thread.RwLock.DefaultRwLock;
 
-const RocksData = lib.RocksData;
+const Data = lib.Data;
 const Iterator = lib.Iterator;
 const RawIterator = lib.RawIterator;
 const WriteBatch = lib.WriteBatch;
@@ -12,14 +13,14 @@ const WriteBatch = lib.WriteBatch;
 const copy = lib.data.copy;
 const copyLen = lib.data.copyLen;
 
-pub const Database = struct {
-    allocator: Allocator,
+pub const DB = struct {
     db: *rdb.rocksdb_t,
-    column_families: std.StringHashMap(*rdb.rocksdb_column_family_handle_t),
+    default_cf: ?ColumnFamilyHandle = null,
+    cf_name_to_handle: *CfNameToHandleMap,
 
     const Self = @This();
 
-    pub fn open(dir: []const u8, err_str: *?RocksData) error{RocksDBOpen}!Self {
+    pub fn open(dir: []const u8, err_str: *?Data) error{RocksDBOpen}!Self {
         const options = rdb.rocksdb_options_create();
         rdb.rocksdb_options_set_create_if_missing(options, 1); // TODO is null actually replaced?
         var ch = CallHandler.init(err_str);
@@ -35,82 +36,98 @@ pub const Database = struct {
         dir: []const u8,
         db_options: DBOptions,
         column_families: []const ColumnFamilyDescription,
-        err_str: *?RocksData,
+        err_str: *?Data,
     ) (Allocator.Error || error{RocksDBOpen})!struct { Self, []const ColumnFamily } {
-        const cf_options = try allocator.alloc(?*const rdb.rocksdb_options_t, column_families.len);
-        defer allocator.free(cf_options);
-        const cf_names = try allocator.alloc([*c]const u8, column_families.len);
-        defer allocator.free(cf_names);
-        for (column_families, 0..) |cf, i| {
-            cf_names[i] = @ptrCast(cf.name.ptr);
-            cf_options[i] = cf.options.convert();
-        }
-        const cf_handles = try allocator.alloc(?*rdb.rocksdb_column_family_handle_t, column_families.len);
+        const cf_handles = try allocator.alloc(?ColumnFamilyHandle, column_families.len);
         defer allocator.free(cf_handles);
-        var ch = CallHandler.init(err_str);
-        const db = try ch.handle(rdb.rocksdb_open_column_families(
-            db_options.convert(),
-            dir.ptr,
-            @intCast(cf_names.len),
-            @ptrCast(cf_names.ptr),
-            @ptrCast(cf_options.ptr),
-            @ptrCast(cf_handles.ptr),
-            &ch.err_str_in,
-        ), error.RocksDBOpen);
-        const cfs = try allocator.alloc(ColumnFamily, column_families.len);
-        var cf_map = std.StringHashMap(*rdb.rocksdb_column_family_handle_t).init(allocator);
-        for (cfs, 0..) |*cf, i| {
+
+        // open database
+        const db = db: {
+            const cf_options = try allocator.alloc(?*const rdb.rocksdb_options_t, column_families.len);
+            defer allocator.free(cf_options);
+            const cf_names = try allocator.alloc([*c]const u8, column_families.len);
+            defer allocator.free(cf_names);
+            for (column_families, 0..) |cf, i| {
+                cf_names[i] = @ptrCast(cf.name.ptr);
+                cf_options[i] = cf.options.convert();
+            }
+            var ch = CallHandler.init(err_str);
+            break :db try ch.handle(rdb.rocksdb_open_column_families(
+                db_options.convert(),
+                dir.ptr,
+                @intCast(cf_names.len),
+                @ptrCast(cf_names.ptr),
+                @ptrCast(cf_options.ptr),
+                @ptrCast(cf_handles.ptr),
+                &ch.err_str_in,
+            ), error.RocksDBOpen);
+        };
+
+        // organize column family metadata
+        const cf_list = try allocator.alloc(ColumnFamily, column_families.len);
+        errdefer allocator.free(cf_list);
+        const cf_map = try CfNameToHandleMap.create(allocator);
+        errdefer cf_map.destroy();
+        for (cf_list, 0..) |*cf, i| {
             const name = try allocator.alloc(u8, column_families[i].name.len);
             @memcpy(name, column_families[i].name);
             cf.* = .{
                 .name = name,
                 .handle = cf_handles[i].?,
             };
-            try cf_map.put(name, cf_handles[i].?);
+            try cf_map.map.put(name, cf_handles[i].?);
         }
         const self = Self{
-            .allocator = allocator,
             .db = db.?,
-            .column_families = cf_map,
+            .cf_name_to_handle = cf_map,
         };
 
-        return .{ self, cfs };
+        return .{ self, cf_list };
+    }
+
+    pub fn withDefaultColumnFamily(self: Self, column_family: ColumnFamilyHandle) Self {
+        return .{
+            .db = self.db,
+            .cf_name_to_handle = self.cf_name_to_handle,
+            .default_cf = column_family,
+        };
     }
 
     pub fn deinit(self: *Self) void {
-        var iter = self.column_families.keyIterator();
-        while (iter.next()) |k| {
-            self.allocator.free(k.*);
-        }
-        self.column_families.deinit();
         rdb.rocksdb_close(self.db);
+        self.cf_name_to_handle.destroy();
     }
 
     pub fn createColumnFamily(
         self: *Self,
         name: []const u8,
-        err_str: *?RocksData,
-    ) !*rdb.rocksdb_column_family_handle_t {
+        err_str: *?Data,
+    ) !ColumnFamilyHandle {
         const options = rdb.rocksdb_options_create();
         var ch = CallHandler.init(err_str);
-        return (try ch.handle(rdb.rocksdb_create_column_family(
+        const handle = (try ch.handle(rdb.rocksdb_create_column_family(
             self.db,
             options,
             @as([*c]const u8, @ptrCast(name)),
             &ch.err_str_in,
         ), error.RocksDBCreateColumnFamily)).?;
+        self.cf_name_to_handle.put(name, handle);
+        return handle;
     }
 
-    pub fn columnFamily(self: *const Self, cf_name: []const u8) ?*rdb.rocksdb_column_family_handle_t {
-        return self.column_families.get(cf_name);
+    pub fn columnFamily(
+        self: *const Self,
+        cf_name: []const u8,
+    ) error{UnknownColumnFamily}!ColumnFamilyHandle {
+        return self.cf_name_to_handle.get(cf_name) orelse error.UnknownColumnFamily;
     }
 
     pub fn put(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
         key: []const u8,
         value: []const u8,
-        err_str: *?RocksData,
+        err_str: *?Data,
     ) error{RocksDBPut}!void {
         const options = rdb.rocksdb_writeoptions_create();
         defer rdb.rocksdb_writeoptions_destroy(options);
@@ -118,7 +135,7 @@ pub const Database = struct {
         try ch.handle(rdb.rocksdb_put_cf(
             self.db,
             options,
-            family,
+            column_family orelse self.default_cf,
             key.ptr,
             key.len,
             value.ptr,
@@ -129,10 +146,10 @@ pub const Database = struct {
 
     pub fn get(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
         key: []const u8,
-        err_str: *?RocksData,
-    ) error{RocksDBGet}!?RocksData {
+        err_str: *?Data,
+    ) error{RocksDBGet}!?Data {
         var valueLength: usize = 0;
         const options = rdb.rocksdb_readoptions_create();
         defer rdb.rocksdb_readoptions_destroy(options);
@@ -140,25 +157,23 @@ pub const Database = struct {
         const value = try ch.handle(rdb.rocksdb_get_cf(
             self.db,
             options,
-            family,
+            column_family orelse self.default_cf,
             key.ptr,
             key.len,
             &valueLength,
             &ch.err_str_in,
         ), error.RocksDBGet);
-
         if (value == 0) {
             return null;
         }
-
         return .{ .data = value[0..valueLength] };
     }
 
     pub fn delete(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
         key: []const u8,
-        err_str: *?RocksData,
+        err_str: *?Data,
     ) error{RocksDBDelete}!void {
         const options = rdb.rocksdb_writeoptions_create();
         defer rdb.rocksdb_writeoptions_destroy(options);
@@ -166,7 +181,7 @@ pub const Database = struct {
         try ch.handle(rdb.rocksdb_delete_cf(
             self.db,
             options,
-            family,
+            column_family orelse self.default_cf,
             key.ptr,
             key.len,
             &ch.err_str_in,
@@ -175,15 +190,15 @@ pub const Database = struct {
 
     pub fn deleteFileInRange(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
         start_key: []const u8,
         limit_key: []const u8,
-        err_str: *?RocksData,
+        err_str: *?Data,
     ) error{RocksDBDeleteFileInRange}!void {
         var ch = CallHandler.init(err_str);
         try ch.handle(rdb.rocksdb_delete_file_in_range_cf(
             self.db,
-            family,
+            column_family orelse self.default_cf,
             @ptrCast(start_key.ptr),
             start_key.len,
             @ptrCast(limit_key.ptr),
@@ -194,9 +209,9 @@ pub const Database = struct {
 
     pub fn iterator(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
     ) Iterator {
-        const it = self.rawIterator(family);
+        const it = self.rawIterator(column_family);
         it.seekToFirst();
         return .{
             .raw = it,
@@ -207,11 +222,15 @@ pub const Database = struct {
 
     pub fn rawIterator(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
     ) RawIterator {
         const options = rdb.rocksdb_readoptions_create();
         defer rdb.rocksdb_readoptions_destroy(options); // TODO does this need to outlive the iterator?
-        const inner_iter = rdb.rocksdb_create_iterator_cf(self.db, options, family).?;
+        const inner_iter = rdb.rocksdb_create_iterator_cf(
+            self.db,
+            options,
+            column_family orelse self.default_cf,
+        ).?;
         const ri = RawIterator{ .inner = inner_iter };
         return ri;
     }
@@ -241,12 +260,12 @@ pub const Database = struct {
 
     pub fn propertyValueCf(
         self: *const Self,
-        family: *rdb.rocksdb_column_family_handle_t,
+        column_family: ?ColumnFamilyHandle,
         propname: []const u8,
-    ) RocksData {
+    ) Data {
         const value = rdb.rocksdb_property_value_cf(
             self.db,
-            family,
+            column_family orelse self.default_cf,
             @ptrCast(propname.ptr),
         );
         return .{ .data = std.mem.span(value) };
@@ -255,7 +274,7 @@ pub const Database = struct {
     pub fn write(
         self: *const Self,
         batch: WriteBatch,
-        err_str: *?RocksData,
+        err_str: *?Data,
     ) error{RocksDBWrite}!void {
         const options = rdb.rocksdb_writeoptions_create();
         defer rdb.rocksdb_writeoptions_destroy(options);
@@ -288,8 +307,10 @@ pub const ColumnFamilyDescription = struct {
 
 pub const ColumnFamily = struct {
     name: []const u8,
-    handle: *rdb.rocksdb_column_family_handle_t,
+    handle: ColumnFamilyHandle,
 };
+
+pub const ColumnFamilyHandle = *rdb.rocksdb_column_family_handle_t;
 
 pub const ColumnFamilyOptions = struct {
     fn convert(_: ColumnFamilyOptions) *rdb.struct_rocksdb_options_t {
@@ -329,9 +350,9 @@ const CallHandler = struct {
     /// The error string to pass into rocksdb.
     err_str_in: ?[*:0]u8 = null,
     /// The user's error string.
-    err_str_out: *?RocksData,
+    err_str_out: *?Data,
 
-    fn init(err_str_out: *?RocksData) @This() {
+    fn init(err_str_out: *?Data) @This() {
         return .{ .err_str_out = err_str_out };
     }
 
@@ -353,8 +374,49 @@ const CallHandler = struct {
     }
 };
 
-test Database {
-    var err_str: ?RocksData = null;
+const CfNameToHandleMap = struct {
+    allocator: Allocator,
+    map: std.StringHashMap(ColumnFamilyHandle),
+    lock: DefaultRwLock,
+
+    const Self = @This();
+
+    fn create(allocator: Allocator) Allocator.Error!*Self {
+        const self = try allocator.create(Self);
+        self.* = .{
+            .allocator = allocator,
+            .map = std.StringHashMap(ColumnFamilyHandle).init(allocator),
+            .lock = .{},
+        };
+        return self;
+    }
+
+    fn destroy(self: *Self) void {
+        var iter = self.map.keyIterator();
+        while (iter.next()) |k| {
+            self.allocator.free(k.*);
+        }
+        self.map.deinit();
+        self.allocator.destroy(self);
+    }
+
+    fn put(self: *Self, name: []const u8, handle: ColumnFamilyHandle) Allocator.Error!void {
+        const owned_name = try self.allocator.alloc(u8, name.len);
+        @memcpy(owned_name, name);
+        self.lock.lock();
+        defer self.lock.unlock();
+        self.map.put(owned_name, handle);
+    }
+
+    fn get(self: *const Self, name: []const u8) ?ColumnFamilyHandle {
+        self.lock.lockShared();
+        defer self.lock.unlockShared();
+        return self.map.get(name);
+    }
+};
+
+test DB {
+    var err_str: ?Data = null;
     defer if (err_str) |e| e.deinit();
     runTest(&err_str) catch |e| {
         std.debug.print("{}: {?}\n", .{ e, err_str });
@@ -362,8 +424,8 @@ test Database {
     };
 }
 
-fn runTest(err_str: *?RocksData) !void {
-    var db, const families = try Database.openCf(
+fn runTest(err_str: *?Data) !void {
+    var db, const families = try DB.openCf(
         std.testing.allocator,
         "test-state",
         .{
@@ -382,20 +444,22 @@ fn runTest(err_str: *?RocksData) !void {
 
     _ = try db.put(a_family, "hello", "world", err_str);
     _ = try db.put(a_family, "zebra", "world", err_str);
-    const val = try db.get(a_family, "hello", err_str);
+
+    db = db.withDefaultColumnFamily(a_family);
+
+    const val = try db.get(null, "hello", err_str);
     try std.testing.expect(std.mem.eql(u8, val.?.data, "world"));
 
-    var iter = db.iterator(a_family);
+    var iter = db.iterator(null);
     var v = (try iter.nextValue(err_str)).?;
     try std.testing.expect(std.mem.eql(u8, "world", v.data));
     v = (try iter.nextValue(err_str)).?;
     try std.testing.expect(std.mem.eql(u8, "world", v.data));
-
     try std.testing.expect(null == try iter.next(err_str));
 
-    try db.delete(a_family, "hello", err_str);
+    try db.delete(null, "hello", err_str);
 
-    const noval = try db.get(a_family, "hello", err_str);
+    const noval = try db.get(null, "hello", err_str);
     try std.testing.expect(null == noval);
 
     const lfs = try db.liveFiles(std.testing.allocator);

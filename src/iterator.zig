@@ -4,7 +4,7 @@ const lib = @import("lib.zig");
 
 const Allocator = std.mem.Allocator;
 
-const RocksData = lib.RocksData;
+const Data = lib.Data;
 
 pub const Direction = enum { forward, reverse };
 
@@ -15,32 +15,23 @@ pub const Iterator = struct {
 
     const Self = @This();
 
-    pub fn next(
-        self: *Self,
-        err_str: *?RocksData,
-    ) error{RocksDBIterator}!?[2]RocksData {
-        return self.nextGeneric([2]RocksData, RawIterator.entry, err_str);
+    pub fn next(self: *Self, err_str: *?Data) error{RocksDBIterator}!?[2]Data {
+        return self.nextGeneric([2]Data, RawIterator.entry, err_str);
     }
 
-    pub fn nextKey(
-        self: *Self,
-        err_str: *?RocksData,
-    ) error{RocksDBIterator}!?RocksData {
-        return self.nextGeneric(RocksData, RawIterator.key, err_str);
+    pub fn nextKey(self: *Self, err_str: *?Data) error{RocksDBIterator}!?Data {
+        return self.nextGeneric(Data, RawIterator.key, err_str);
     }
 
-    pub fn nextValue(
-        self: *Self,
-        err_str: *?RocksData,
-    ) error{RocksDBIterator}!?RocksData {
-        return self.nextGeneric(RocksData, RawIterator.value, err_str);
+    pub fn nextValue(self: *Self, err_str: *?Data) error{RocksDBIterator}!?Data {
+        return self.nextGeneric(Data, RawIterator.value, err_str);
     }
 
     fn nextGeneric(
         self: *Self,
         comptime T: type,
         getNext: fn (RawIterator) ?T,
-        err_str: *?RocksData,
+        err_str: *?Data,
     ) error{RocksDBIterator}!?T {
         if (self.done) {
             return null;
@@ -79,7 +70,7 @@ pub const RawIterator = struct {
         return rdb.rocksdb_iter_valid(self.inner) != 0;
     }
 
-    pub fn entry(self: Self) ?[2]RocksData {
+    pub fn entry(self: Self) ?[2]Data {
         if (self.valid()) {
             return .{ self.keyImpl(), self.valueImpl() };
         } else {
@@ -87,7 +78,7 @@ pub const RawIterator = struct {
         }
     }
 
-    pub fn key(self: Self) ?RocksData {
+    pub fn key(self: Self) ?Data {
         if (self.valid()) {
             return self.keyImpl();
         } else {
@@ -95,7 +86,7 @@ pub const RawIterator = struct {
         }
     }
 
-    pub fn value(self: Self) ?RocksData {
+    pub fn value(self: Self) ?Data {
         if (self.valid()) {
             return self.valueImpl();
         } else {
@@ -103,13 +94,13 @@ pub const RawIterator = struct {
         }
     }
 
-    fn keyImpl(self: Self) RocksData {
+    fn keyImpl(self: Self) Data {
         var len: usize = undefined;
         const ret = rdb.rocksdb_iter_key(self.inner, &len);
         return .{ .data = ret[0..len] };
     }
 
-    fn valueImpl(self: Self) RocksData {
+    fn valueImpl(self: Self) Data {
         var len: usize = undefined;
         const ret = rdb.rocksdb_iter_value(self.inner, &len);
         return .{ .data = ret[0..len] };
@@ -123,7 +114,7 @@ pub const RawIterator = struct {
         rdb.rocksdb_iter_prev(self.inner);
     }
 
-    pub fn status(self: Self, err_str: *?RocksData) error{RocksDBIterator}!void {
+    pub fn status(self: Self, err_str: *?Data) error{RocksDBIterator}!void {
         var err_str_in: ?[*:0]u8 = null;
         rdb.rocksdb_iter_get_error(self.inner, @ptrCast(&err_str_in));
         if (err_str_in) |s| {
