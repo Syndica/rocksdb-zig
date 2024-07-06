@@ -93,7 +93,7 @@ pub const DB = struct {
         };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: Self) void {
         rdb.rocksdb_close(self.db);
         self.cf_name_to_handle.destroy();
     }

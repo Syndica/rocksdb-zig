@@ -12,6 +12,8 @@ pub const Data = data.Data;
 
 pub const WriteBatch = batch.WriteBatch;
 
+pub const free = data.free;
+
 ////////////
 // private
 pub const batch = @import("batch.zig");

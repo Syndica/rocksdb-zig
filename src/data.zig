@@ -8,7 +8,7 @@ pub const Data = struct {
     data: []const u8,
 
     pub fn deinit(self: @This()) void {
-        rdb.rocksdb_free(@constCast(@ptrCast(self.data.ptr)));
+        free(self.data.ptr);
     }
 
     pub fn format(
@@ -20,6 +20,15 @@ pub const Data = struct {
         try std.fmt.formatBuf(self.data, options, writer);
     }
 };
+
+/// Free memory that was allocated by rocksdb.
+///
+/// Typically, you would only use this if you unwrap a
+/// slice out of the Data struct, and discard the Data
+/// struct before freeing the memory.
+pub fn free(bytes: []const u8) void {
+    rdb.rocksdb_free(@constCast(@ptrCast(bytes.ptr)));
+}
 
 pub fn copy(allocator: Allocator, in: [*c]const u8) Allocator.Error![]u8 {
     return copyLen(allocator, in, std.mem.len(in));
