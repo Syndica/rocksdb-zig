@@ -13,6 +13,8 @@ const WriteBatch = lib.WriteBatch;
 const copy = lib.data.copy;
 const copyLen = lib.data.copyLen;
 
+const general_freer = lib.data.general_freer;
+
 pub const DB = struct {
     db: *rdb.rocksdb_t,
     default_cf: ?ColumnFamilyHandle = null,
@@ -166,7 +168,10 @@ pub const DB = struct {
         if (value == 0) {
             return null;
         }
-        return .{ .data = value[0..valueLength] };
+        return .{
+            .allocator = general_freer,
+            .data = value[0..valueLength],
+        };
     }
 
     pub fn delete(
@@ -268,7 +273,10 @@ pub const DB = struct {
             column_family orelse self.default_cf,
             @ptrCast(propname.ptr),
         );
-        return .{ .data = std.mem.span(value) };
+        return .{
+            .data = std.mem.span(value),
+            .allocator = general_freer,
+        };
     }
 
     pub fn write(
@@ -366,7 +374,10 @@ const CallHandler = struct {
         comptime err: anytype,
     ) @TypeOf(err)!@TypeOf(ret) {
         if (self.err_str_in) |s| {
-            self.err_str_out.* = .{ .data = std.mem.span(s) };
+            self.err_str_out.* = .{
+                .data = std.mem.span(s),
+                .allocator = general_freer,
+            };
             return err;
         } else {
             return ret;

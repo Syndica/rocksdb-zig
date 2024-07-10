@@ -6,6 +6,8 @@ const Allocator = std.mem.Allocator;
 
 const Data = lib.Data;
 
+const general_freer = lib.data.general_freer;
+
 pub const Direction = enum { forward, reverse };
 
 pub const Iterator = struct {
@@ -97,13 +99,19 @@ pub const RawIterator = struct {
     fn keyImpl(self: Self) Data {
         var len: usize = undefined;
         const ret = rdb.rocksdb_iter_key(self.inner, &len);
-        return .{ .data = ret[0..len] };
+        return .{
+            .data = ret[0..len],
+            .allocator = general_freer,
+        };
     }
 
     fn valueImpl(self: Self) Data {
         var len: usize = undefined;
         const ret = rdb.rocksdb_iter_value(self.inner, &len);
-        return .{ .data = ret[0..len] };
+        return .{
+            .data = ret[0..len],
+            .allocator = general_freer,
+        };
     }
 
     pub fn next(self: Self) void {
@@ -118,7 +126,10 @@ pub const RawIterator = struct {
         var err_str_in: ?[*:0]u8 = null;
         rdb.rocksdb_iter_get_error(self.inner, @ptrCast(&err_str_in));
         if (err_str_in) |s| {
-            err_str.* = .{ .data = std.mem.span(s) };
+            err_str.* = .{
+                .data = std.mem.span(s),
+                .allocator = general_freer,
+            };
             return error.RocksDBIterator;
         }
     }
