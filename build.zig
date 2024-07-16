@@ -139,7 +139,14 @@ fn makeAndMove(
         &.{ "make", "CC=zig cc", "CXX=zig c++", "-C", rocks_path, make_rule, "-j", cpu_count },
         allocator,
     );
-    const term = try make.spawnAndWait();
+    const term = make.spawnAndWait() catch |e| {
+        switch (e) {
+            error.FileNotFound => std.debug
+                .print("Ensure `make` is installed and available in PATH.\n", .{}),
+            else => {},
+        }
+        return e;
+    };
     if (term.Exited != 0) {
         std.debug.print("make exited with code {}\n", .{term.Exited});
         return error.MakeError;
