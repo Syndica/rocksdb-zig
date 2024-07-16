@@ -70,7 +70,6 @@ pub fn exposeRocksDb(
         .optimize = optimize,
         .link_libc = false,
     });
-    translate_c.addIncludeDir(rocks_dep.path("include").getPath(b));
     const mod = translate_c.addModule("rocksdb");
     mod.link_libcpp = true;
     mod.linkLibrary(lib);
@@ -117,50 +116,9 @@ fn addMakeAndMove(
     std.Build.LazyPath,
 } {
     const run = b.addSystemCommand(&.{
-        "zig", "run", b.path("build.zig").getPath(b), "--", rocks_path, make_rule, filename,
+        "zig",      "run",     b.path("scripts/make_and_move.zig").getPath(b), "--",
+        rocks_path, make_rule, filename,
     });
     const path = run.addOutputFileArg(filename);
     return .{ run, path };
-}
-
-/// this should only be called in main. the zig build system will
-/// run this when the addMakeAndMove step is run.
-/// directly executes the make and move
-fn makeAndMove(
-    allocator: std.mem.Allocator,
-    rocks_path: []const u8,
-    make_rule: []const u8,
-    filename: []const u8,
-    target_path: []const u8,
-) !void {
-    var buf: [4]u8 = undefined;
-    const cpu_count = try std.fmt.bufPrint(&buf, "{}", .{try std.Thread.getCpuCount()});
-    var make = std.process.Child.init(
-        &.{ "make", "CC=zig cc", "CXX=zig c++", "-C", rocks_path, make_rule, "-j", cpu_count },
-        allocator,
-    );
-    const term = make.spawnAndWait() catch |e| {
-        switch (e) {
-            error.FileNotFound => std.debug
-                .print("Ensure `make` is installed and available in PATH.\n", .{}),
-            else => {},
-        }
-        return e;
-    };
-    if (term.Exited != 0) {
-        std.debug.print("make exited with code {}\n", .{term.Exited});
-        return error.MakeError;
-    }
-    const source_path = try std.fs.path.join(allocator, &.{ rocks_path, filename });
-    try std.fs.renameAbsolute(source_path, target_path);
-}
-
-pub fn main() !void {
-    try makeAndMove(
-        std.heap.page_allocator,
-        std.mem.span(std.os.argv[1]),
-        std.mem.span(std.os.argv[2]),
-        std.mem.span(std.os.argv[3]),
-        std.mem.span(std.os.argv[4]),
-    );
 }
