@@ -4,28 +4,15 @@ const ResolvedTarget = Build.ResolvedTarget;
 const OptimizeMode = std.builtin.OptimizeMode;
 
 pub fn build(b: *Build) void {
-    const target: ResolvedTarget = b.standardTargetOptions(.{});
-    const optimize: OptimizeMode = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
     const test_step = b.step("test", "Run bindings tests");
 
-    const rocks_dep = b.dependency("rocksdb", .{});
+    // rocksdb itself as a zig module
+    const rocksdb_mod = buildRocksDb(b, target, optimize);
 
-    const translate_c = b.addTranslateC(.{
-        .root_source_file = rocks_dep.path("include/rocksdb/c.h"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const rocksdb_mod = b.addModule("rocksdb", .{
-        .root_source_file = translate_c.getOutput(),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-        .link_libcpp = true,
-    });
-    buildAndLinkRocksDb(b, rocksdb_mod);
-
-    // module
+    // zig bindings library to rocksdb
     const bindings_mod = b.addModule("rocksdb-bindings", .{
         .target = target,
         .optimize = optimize,
@@ -40,28 +27,43 @@ pub fn build(b: *Build) void {
         .root_source_file = b.path("src/lib.zig"),
     });
     tests.root_module.addImport("rocksdb", rocksdb_mod);
-    buildAndLinkRocksDb(b, &tests.root_module);
-
-    const run_tests = b.addRunArtifact(tests);
-    test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&b.addRunArtifact(tests).step);
 }
 
-/// Build and link the C++ library.
-fn buildAndLinkRocksDb(
+/// Create a zig module for the bare C++ library by exposing its C api.
+/// Builds rocksdb, links it, and translates its headers.
+///
+/// TODO: remove make dependency by reimplementing in zig
+fn buildRocksDb(
     b: *Build,
-    /// Module to add the object files to.
-    mod: *Build.Module,
-) void {
-    const make_and_move_exe = makeAndMoveExe(b);
-
-    // build rocksdb with make
-    // TODO: remove make dependency by reimplementing in zig
+    target: ResolvedTarget,
+    optimize: OptimizeMode,
+) *Build.Module {
     const rocks_dep = b.dependency("rocksdb", .{});
-    const rocks_path = rocks_dep.path("");
 
-    const librocksdb_a = addMakeAndMove(b, make_and_move_exe, rocks_path, "static_lib", "librocksdb.a");
-    const libbz2_a = addMakeAndMove(b, make_and_move_exe, rocks_path, "libbz2.a", "libbz2.a");
-    const libz_a = addMakeAndMove(b, make_and_move_exe, rocks_path, "libz.a", "libz.a");
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = rocks_dep.path("include/rocksdb/c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const mod = b.addModule("rocksdb", .{
+        .root_source_file = translate_c.getOutput(),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+
+    const make_and_move = b.addExecutable(.{
+        .name = "make_and_move.zig",
+        .root_source_file = b.path("scripts/make_and_move.zig"),
+        .target = b.resolveTargetQuery(.{}),
+    });
+    const rocks_path = rocks_dep.path("");
+    const librocksdb_a = addMakeAndMove(b, make_and_move, rocks_path, "static_lib", "librocksdb.a");
+    const libbz2_a = addMakeAndMove(b, make_and_move, rocks_path, "libbz2.a", "libbz2.a");
+    const libz_a = addMakeAndMove(b, make_and_move, rocks_path, "libz.a", "libz.a");
 
     mod.addIncludePath(rocks_dep.path("include"));
 
@@ -69,18 +71,7 @@ fn buildAndLinkRocksDb(
     mod.addObjectFile(libbz2_a);
     mod.addObjectFile(libz_a);
 
-    mod.linkSystemLibrary("zstd", .{});
-    mod.linkSystemLibrary("lz4", .{});
-    mod.linkSystemLibrary("snappy", .{});
-    mod.linkSystemLibrary("uring", .{});
-}
-
-fn makeAndMoveExe(b: *Build) *Build.Step.Compile {
-    return b.addExecutable(.{
-        .name = "make-and-move",
-        .root_source_file = b.path("scripts/make_and_move.zig"),
-        .target = b.resolveTargetQuery(.{}),
-    });
+    return mod;
 }
 
 /// add a build step to make the library and then move the output file to the cache
