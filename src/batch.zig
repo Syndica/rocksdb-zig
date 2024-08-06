@@ -21,13 +21,13 @@ pub const WriteBatch = struct {
 
     pub fn put(
         self: *const Self,
-        column_family: ?ColumnFamilyHandle,
+        column_family: ColumnFamilyHandle,
         key: []const u8,
         value: []const u8,
     ) void {
         rdb.rocksdb_writebatch_put_cf(
             self.inner,
-            column_family orelse self.default_cf,
+            column_family,
             key.ptr,
             key.len,
             value.ptr,
@@ -37,12 +37,12 @@ pub const WriteBatch = struct {
 
     pub fn delete(
         self: *const Self,
-        column_family: ?ColumnFamilyHandle,
+        column_family: ColumnFamilyHandle,
         key: []const u8,
     ) void {
         rdb.rocksdb_writebatch_delete_cf(
             self.inner,
-            column_family orelse self.default_cf,
+            column_family,
             key.ptr,
             key.len,
         );
@@ -50,13 +50,13 @@ pub const WriteBatch = struct {
 
     pub fn deleteRange(
         self: *const Self,
-        column_family: ?ColumnFamilyHandle,
+        column_family: ColumnFamilyHandle,
         start_key: []const u8,
         end_key: []const u8,
     ) void {
         rdb.rocksdb_writebatch_delete_range_cf(
             self.inner,
-            column_family orelse self.default_cf,
+            column_family,
             start_key.ptr,
             start_key.len,
             end_key.ptr,
