@@ -7,6 +7,7 @@ const DefaultRwLock = std.Thread.RwLock.DefaultRwLock;
 
 const Data = lib.Data;
 const Iterator = lib.Iterator;
+const IteratorDirection = lib.IteratorDirection;
 const RawIterator = lib.RawIterator;
 const WriteBatch = lib.WriteBatch;
 
@@ -215,12 +216,16 @@ pub const DB = struct {
     pub fn iterator(
         self: *const Self,
         column_family: ?ColumnFamilyHandle,
+        direction: IteratorDirection,
     ) Iterator {
         const it = self.rawIterator(column_family);
-        it.seekToFirst();
+        switch (direction) {
+            .forward => it.seekToFirst(),
+            .reverse => it.seekToLast(),
+        }
         return .{
             .raw = it,
-            .direction = .forward,
+            .direction = direction,
             .done = false,
         };
     }

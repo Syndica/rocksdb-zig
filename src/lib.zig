@@ -1,4 +1,5 @@
 pub const Iterator = iterator.Iterator;
+pub const IteratorDirection = iterator.Direction;
 pub const RawIterator = iterator.RawIterator;
 
 pub const ColumnFamily = database.ColumnFamily;
