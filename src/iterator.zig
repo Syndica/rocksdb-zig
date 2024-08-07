@@ -60,6 +60,10 @@ pub const RawIterator = struct {
         rdb.rocksdb_iter_seek(self.inner, @ptrCast(key_.ptr), key_.len);
     }
 
+    pub fn seekForPrev(self: Self, key_: []const u8) void {
+        rdb.rocksdb_iter_seek_for_prev(self.inner, @ptrCast(key_.ptr), key_.len);
+    }
+
     pub fn seekToFirst(self: Self) void {
         rdb.rocksdb_iter_seek_to_first(self.inner);
     }
