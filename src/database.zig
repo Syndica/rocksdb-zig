@@ -466,7 +466,7 @@ fn runTest(err_str: *?Data) !void {
     const val = try db.get(null, "hello", err_str);
     try std.testing.expect(std.mem.eql(u8, val.?.data, "world"));
 
-    var iter = db.iterator(null);
+    var iter = db.iterator(null, .forward);
     var v = (try iter.nextValue(err_str)).?;
     try std.testing.expect(std.mem.eql(u8, "world", v.data));
     v = (try iter.nextValue(err_str)).?;
