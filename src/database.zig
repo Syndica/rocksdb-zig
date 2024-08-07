@@ -217,9 +217,13 @@ pub const DB = struct {
         self: *const Self,
         column_family: ?ColumnFamilyHandle,
         direction: IteratorDirection,
+        start: ?[]const u8,
     ) Iterator {
         const it = self.rawIterator(column_family);
-        switch (direction) {
+        if (start) |seek_target| switch (direction) {
+            .forward => it.seek(seek_target),
+            .reverse => it.seekForPrev(seek_target),
+        } else switch (direction) {
             .forward => it.seekToFirst(),
             .reverse => it.seekToLast(),
         }
@@ -466,7 +470,7 @@ fn runTest(err_str: *?Data) !void {
     const val = try db.get(null, "hello", err_str);
     try std.testing.expect(std.mem.eql(u8, val.?.data, "world"));
 
-    var iter = db.iterator(null, .forward);
+    var iter = db.iterator(null, .forward, null);
     var v = (try iter.nextValue(err_str)).?;
     try std.testing.expect(std.mem.eql(u8, "world", v.data));
     v = (try iter.nextValue(err_str)).?;
