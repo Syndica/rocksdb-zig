@@ -21,8 +21,8 @@ You can use these artifacts with any language or build system.
 Add this to your dependencies in build.zig.zon:
 ```zig
 .rocksdb = .{
-    .url = "https://github.com/Syndica/rocksdb-zig/archive/fa313c2ee5bcacf0c3a822ae64222328e5db0e60.tar.gz",
-    .hash = "1220cb13f4c67b126d05fb7973476cb74542d68a45d812985890d8ce55f1c1e0e1e7",
+    .url = "https://github.com/Syndica/rocksdb-zig/archive/<COMMIT_HASH>.tar.gz",
+    .hash = "<TARBALL_HASH>",
 },
 ```
 
@@ -42,8 +42,8 @@ const rocksdb = @import("rocksdb");
 Add this to your dependencies in build.zig.zon:
 ```zig
 .rocksdb = .{
-    .url = "https://github.com/Syndica/rocksdb-zig/archive/fa313c2ee5bcacf0c3a822ae64222328e5db0e60.tar.gz",
-    .hash = "1220cb13f4c67b126d05fb7973476cb74542d68a45d812985890d8ce55f1c1e0e1e7",
+    .url = "https://github.com/Syndica/rocksdb-zig/archive/<COMMIT_HASH>.tar.gz",
+    .hash = "<TARBALL_HASH>",
 },
 ```
 
