@@ -18,6 +18,10 @@ pub const Iterator = struct {
 
     const Self = @This();
 
+    pub fn deinit(self: Self) void {
+        self.raw.deinit();
+    }
+
     pub fn next(self: *Self, err_str: *?Data) error{RocksDBIterator}!?[2]Data {
         return self.nextGeneric([2]Data, RawIterator.entry, err_str);
     }
@@ -64,6 +68,10 @@ pub const RawIterator = struct {
     inner: *rdb.rocksdb_iterator_t,
 
     const Self = @This();
+
+    pub fn deinit(self: Self) void {
+        rdb.rocksdb_iter_destroy(self.inner);
+    }
 
     pub fn seek(self: Self, key_: []const u8) void {
         rdb.rocksdb_iter_seek(self.inner, @ptrCast(key_.ptr), key_.len);
