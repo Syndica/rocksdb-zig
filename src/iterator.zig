@@ -14,6 +14,7 @@ pub const Iterator = struct {
     raw: RawIterator,
     direction: Direction,
     done: bool,
+    is_first: bool = true,
 
     const Self = @This();
 
@@ -37,16 +38,24 @@ pub const Iterator = struct {
     ) error{RocksDBIterator}!?T {
         if (self.done) {
             return null;
-        } else if (getNext(self.raw)) |item| {
-            switch (self.direction) {
-                .forward => self.raw.next(),
-                .reverse => self.raw.prev(),
-            }
-            return item;
         } else {
-            self.done = true;
-            try self.raw.status(err_str);
-            return null;
+            // NOTE: we call next before getting the value (instead of after)
+            // because rocksdb uses pointers
+            if (!self.is_first) {
+                switch (self.direction) {
+                    .forward => self.raw.next(),
+                    .reverse => self.raw.prev(),
+                }
+            }
+
+            if (getNext(self.raw)) |item| {
+                self.is_first = false;
+                return item;
+            } else {
+                self.done = true;
+                try self.raw.status(err_str);
+                return null;
+            }
         }
     }
 };
