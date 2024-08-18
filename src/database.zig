@@ -97,8 +97,8 @@ pub const DB = struct {
     }
 
     pub fn deinit(self: Self) void {
-        rdb.rocksdb_close(self.db);
         self.cf_name_to_handle.destroy();
+        rdb.rocksdb_close(self.db);
     }
 
     pub fn createColumnFamily(
@@ -412,9 +412,10 @@ const CfNameToHandleMap = struct {
     }
 
     fn destroy(self: *Self) void {
-        var iter = self.map.keyIterator();
-        while (iter.next()) |k| {
-            self.allocator.free(k.*);
+        var iter = self.map.iterator();
+        while (iter.next()) |entry| {
+            rdb.rocksdb_column_family_handle_destroy(entry.value_ptr.*);
+            self.allocator.free(entry.key_ptr.*);
         }
         self.map.deinit();
         self.allocator.destroy(self);
@@ -471,6 +472,7 @@ fn runTest(err_str: *?Data) !void {
     try std.testing.expect(std.mem.eql(u8, val.?.data, "world"));
 
     var iter = db.iterator(null, .forward, null);
+    defer iter.deinit();
     var v = (try iter.nextValue(err_str)).?;
     try std.testing.expect(std.mem.eql(u8, "world", v.data));
     v = (try iter.nextValue(err_str)).?;
