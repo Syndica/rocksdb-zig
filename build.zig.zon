@@ -11,6 +11,5 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "scripts/make_and_move.zig",
     },
 }
