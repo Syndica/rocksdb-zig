@@ -420,8 +420,8 @@ fn buildLibRocksDbStatic(
         .flags = &.{
             "-std=c++17",
             "-faligned-new",
-            "-DROCKSDB_PLATFORM_POSIX",
             "-DHAVE_ALIGNED_NEW",
+            "-DROCKSDB_UBSAN_RUN",
         },
     });
 
