@@ -52,9 +52,9 @@ fn buildRocksDb(
         .link_libcpp = true,
     });
 
-    const librocksb_a = try buildLibRocksDbStatic(b, target, optimize);
+    const librocksdb_a = try buildLibRocksDbStatic(b, target, optimize);
     mod.addIncludePath(rocks_dep.path("include"));
-    mod.linkLibrary(librocksb_a);
+    mod.linkLibrary(librocksdb_a);
 
     return mod;
 }
@@ -67,17 +67,17 @@ fn buildLibRocksDbStatic(
     const t = target.result;
     const rocks_dep = b.dependency("rocksdb", .{});
 
-    const librocksb_a = b.addStaticLibrary(.{
-        .name = "rocksb",
+    const librocksdb_a = b.addStaticLibrary(.{
+        .name = "rocksdb",
         .target = target,
         .optimize = optimize,
     });
-    librocksb_a.linkLibC();
-    librocksb_a.linkLibCpp();
+    librocksdb_a.linkLibC();
+    librocksdb_a.linkLibCpp();
 
-    librocksb_a.addIncludePath(rocks_dep.path("include"));
-    librocksb_a.addIncludePath(rocks_dep.path("."));
-    librocksb_a.addCSourceFiles(.{
+    librocksdb_a.addIncludePath(rocks_dep.path("include"));
+    librocksdb_a.addIncludePath(rocks_dep.path("."));
+    librocksdb_a.addCSourceFiles(.{
         .root = rocks_dep.path("."),
         .files = &.{
             "cache/cache.cc",
@@ -427,9 +427,9 @@ fn buildLibRocksDbStatic(
 
     // platform dependent stuff
     if (t.os.tag != .windows) {
-        librocksb_a.root_module.addCMacro("ROCKSDB_PLATFORM_POSIX", "");
-        librocksb_a.root_module.addCMacro("ROCKSDB_LIB_IO_POSIX", "");
-        librocksb_a.addCSourceFiles(.{
+        librocksdb_a.root_module.addCMacro("ROCKSDB_PLATFORM_POSIX", "");
+        librocksdb_a.root_module.addCMacro("ROCKSDB_LIB_IO_POSIX", "");
+        librocksdb_a.addCSourceFiles(.{
             .root = rocks_dep.path("."),
             .files = &.{
                 "port/port_posix.cc",
@@ -452,7 +452,7 @@ fn buildLibRocksDbStatic(
         .linux => "OS_LINUX",
         else => std.debug.panic("TODO: support target OS '{s}'", .{@tagName(t.os.tag)}),
     };
-    librocksb_a.root_module.addCMacro(os_name, "");
+    librocksdb_a.root_module.addCMacro(os_name, "");
 
     const build_version = b.addConfigHeader(.{
         .style = .{ .cmake = rocks_dep.path("util/build_version.cc.in") },
@@ -460,9 +460,9 @@ fn buildLibRocksDbStatic(
     }, .{
         .GIT_MOD = 1,
     });
-    librocksb_a.addCSourceFile(.{ .file = build_version.getOutput() });
+    librocksdb_a.addCSourceFile(.{ .file = build_version.getOutput() });
 
-    b.installArtifact(librocksb_a);
+    b.installArtifact(librocksdb_a);
 
-    return librocksb_a;
+    return librocksdb_a;
 }
