@@ -426,6 +426,18 @@ fn buildLibRocksDbStatic(
     });
 
     // platform dependent stuff
+    if (t.cpu.arch == .aarch64) {
+        librocksdb_a.addCSourceFile(.{
+            .file = rocks_dep.path("util/crc32c_arm64.cc"),
+            .flags = &.{
+                "-std=c++17",
+                "-faligned-new",
+                "-DHAVE_ALIGNED_NEW",
+                "-DROCKSDB_UBSAN_RUN",
+            },
+        });
+    }
+
     if (t.os.tag != .windows) {
         librocksdb_a.root_module.addCMacro("ROCKSDB_PLATFORM_POSIX", "");
         librocksdb_a.root_module.addCMacro("ROCKSDB_LIB_IO_POSIX", "");
