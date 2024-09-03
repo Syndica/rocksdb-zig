@@ -3,7 +3,7 @@ const rdb = @import("rocksdb");
 const lib = @import("lib.zig");
 
 const Allocator = std.mem.Allocator;
-const DefaultRwLock = std.Thread.RwLock.DefaultRwLock;
+const RwLock = std.Thread.RwLock;
 
 const Data = lib.Data;
 const Iterator = lib.Iterator;
@@ -23,24 +23,18 @@ pub const DB = struct {
 
     const Self = @This();
 
-    pub fn open(dir: []const u8, err_str: *?Data) error{RocksDBOpen}!Self {
-        const options = rdb.rocksdb_options_create();
-        rdb.rocksdb_options_set_create_if_missing(options, 1); // TODO is null actually replaced?
-        var ch = CallHandler.init(err_str);
-        const db = try ch.handle(
-            rdb.rocksdb_open(options, dir.ptr, &ch.err_str_in),
-            error.RocksDBOpen,
-        );
-        return .{ .db = db.? };
-    }
-
-    pub fn openCf(
+    pub fn open(
         allocator: Allocator,
         dir: []const u8,
         db_options: DBOptions,
-        column_families: []const ColumnFamilyDescription,
+        column_families_: ?[]const ColumnFamilyDescription,
         err_str: *?Data,
     ) (Allocator.Error || error{RocksDBOpen})!struct { Self, []const ColumnFamily } {
+        const column_families = if (column_families_) |cfs|
+            cfs
+        else
+            &[1]ColumnFamilyDescription{.{ .name = "default" }};
+
         const cf_handles = try allocator.alloc(?ColumnFamilyHandle, column_families.len);
         defer allocator.free(cf_handles);
 
@@ -80,12 +74,11 @@ pub const DB = struct {
             };
             try cf_map.map.put(name, cf_handles[i].?);
         }
-        const self = Self{
-            .db = db.?,
-            .cf_name_to_handle = cf_map,
-        };
 
-        return .{ self, cf_list };
+        return .{
+            Self{ .db = db.?, .cf_name_to_handle = cf_map },
+            cf_list,
+        };
     }
 
     pub fn withDefaultColumnFamily(self: Self, column_family: ColumnFamilyHandle) Self {
@@ -96,9 +89,16 @@ pub const DB = struct {
         };
     }
 
+    /// Closes the database and cleans up this struct's state.
     pub fn deinit(self: Self) void {
         self.cf_name_to_handle.destroy();
         rdb.rocksdb_close(self.db);
+    }
+
+    /// Delete the entire database from the filesystem.
+    /// Destroying a database after it is closed has undefined behavior.
+    pub fn destroy(self: Self) error{Closed}!void {
+        rdb.rocksdb_destroy_db(self.db);
     }
 
     pub fn createColumnFamily(
@@ -194,13 +194,13 @@ pub const DB = struct {
         ), error.RocksDBDelete);
     }
 
-    pub fn deleteFileInRange(
+    pub fn deleteFilesInRange(
         self: *const Self,
         column_family: ?ColumnFamilyHandle,
         start_key: []const u8,
         limit_key: []const u8,
         err_str: *?Data,
-    ) error{RocksDBDeleteFileInRange}!void {
+    ) error{RocksDBDeleteFilesInRange}!void {
         var ch = CallHandler.init(err_str);
         try ch.handle(rdb.rocksdb_delete_file_in_range_cf(
             self.db,
@@ -210,7 +210,7 @@ pub const DB = struct {
             @ptrCast(limit_key.ptr),
             limit_key.len,
             &ch.err_str_in,
-        ), error.RocksDBDeleteFileInRange);
+        ), error.RocksDBDeleteFilesInRange);
     }
 
     pub fn iterator(
@@ -397,7 +397,7 @@ const CallHandler = struct {
 const CfNameToHandleMap = struct {
     allocator: Allocator,
     map: std.StringHashMap(ColumnFamilyHandle),
-    lock: DefaultRwLock,
+    lock: RwLock,
 
     const Self = @This();
 
@@ -446,7 +446,7 @@ test DB {
 }
 
 fn runTest(err_str: *?Data) !void {
-    var db, const families = try DB.openCf(
+    var db, const families = try DB.open(
         std.testing.allocator,
         "test-state",
         .{
