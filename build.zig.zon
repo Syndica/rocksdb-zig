@@ -1,10 +1,10 @@
 .{
     .name = "rocksdb",
-    .version = "9.2.1",
+    .version = "9.5.2",
     .dependencies = .{
         .rocksdb = .{
-            .url = "https://github.com/facebook/rocksdb/archive/refs/tags/v9.4.0.tar.gz",
-            .hash = "1220666ef6400d64e1fdf6717dee9c8f7912761ab00c57693fc7c2304ce8a0164fc6",
+            .url = "https://github.com/facebook/rocksdb/archive/refs/tags/v9.5.2.tar.gz",
+            .hash = "1220f5d8df77ff7600619aeccb78ee28370fa22334ce0a8fe6e8adefc7e193097ef4",
         },
     },
     .paths = .{
