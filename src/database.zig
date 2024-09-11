@@ -27,10 +27,10 @@ pub const DB = struct {
         allocator: Allocator,
         dir: []const u8,
         db_options: DBOptions,
-        column_families_: ?[]const ColumnFamilyDescription,
+        maybe_column_families: ?[]const ColumnFamilyDescription,
         err_str: *?Data,
     ) (Allocator.Error || error{RocksDBOpen})!struct { Self, []const ColumnFamily } {
-        const column_families = if (column_families_) |cfs|
+        const column_families = if (maybe_column_families) |cfs|
             cfs
         else
             &[1]ColumnFamilyDescription{.{ .name = "default" }};
@@ -66,13 +66,12 @@ pub const DB = struct {
         const cf_map = try CfNameToHandleMap.create(allocator);
         errdefer cf_map.destroy();
         for (cf_list, 0..) |*cf, i| {
-            const name = try allocator.alloc(u8, column_families[i].name.len);
-            @memcpy(name, column_families[i].name);
+            const name = try allocator.dupe(u8, column_families[i].name);
             cf.* = .{
                 .name = name,
                 .handle = cf_handles[i].?,
             };
-            try cf_map.map.put(name, cf_handles[i].?);
+            try cf_map.map.put(allocator, name, cf_handles[i].?);
         }
 
         return .{
@@ -396,7 +395,7 @@ const CallHandler = struct {
 
 const CfNameToHandleMap = struct {
     allocator: Allocator,
-    map: std.StringHashMap(ColumnFamilyHandle),
+    map: std.StringHashMapUnmanaged(ColumnFamilyHandle),
     lock: RwLock,
 
     const Self = @This();
@@ -405,7 +404,7 @@ const CfNameToHandleMap = struct {
         const self = try allocator.create(Self);
         self.* = .{
             .allocator = allocator,
-            .map = std.StringHashMap(ColumnFamilyHandle).init(allocator),
+            .map = .{},
             .lock = .{},
         };
         return self;
@@ -417,16 +416,17 @@ const CfNameToHandleMap = struct {
             rdb.rocksdb_column_family_handle_destroy(entry.value_ptr.*);
             self.allocator.free(entry.key_ptr.*);
         }
-        self.map.deinit();
+        self.map.deinit(self.allocator);
         self.allocator.destroy(self);
     }
 
     fn put(self: *Self, name: []const u8, handle: ColumnFamilyHandle) Allocator.Error!void {
-        const owned_name = try self.allocator.alloc(u8, name.len);
-        @memcpy(owned_name, name);
+        const owned_name = try self.allocator.dupe(u8, name);
+
         self.lock.lock();
         defer self.lock.unlock();
-        self.map.put(owned_name, handle);
+
+        self.map.put(self.allocator, owned_name, handle);
     }
 
     fn get(self: *const Self, name: []const u8) ?ColumnFamilyHandle {
