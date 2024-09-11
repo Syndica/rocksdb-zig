@@ -27,8 +27,7 @@ pub fn copy(allocator: Allocator, in: [*c]const u8) Allocator.Error![]u8 {
 }
 
 pub fn copyLen(allocator: Allocator, in: [*c]const u8, len: usize) Allocator.Error![]u8 {
-    const ret = try allocator.alloc(u8, len);
-    @memcpy(ret, in[0..len]);
+    const ret = try allocator.dupe(u8, in[0..len]);
     return ret;
 }
 
