@@ -429,7 +429,7 @@ const CfNameToHandleMap = struct {
         self.map.put(self.allocator, owned_name, handle);
     }
 
-    fn get(self: *const Self, name: []const u8) ?ColumnFamilyHandle {
+    fn get(self: *Self, name: []const u8) ?ColumnFamilyHandle {
         self.lock.lockShared();
         defer self.lock.unlockShared();
         return self.map.get(name);
