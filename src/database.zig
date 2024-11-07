@@ -14,8 +14,6 @@ const WriteBatch = lib.WriteBatch;
 const copy = lib.data.copy;
 const copyLen = lib.data.copyLen;
 
-const general_freer = lib.data.general_freer;
-
 pub const DB = struct {
     db: *rdb.rocksdb_t,
     default_cf: ?ColumnFamilyHandle = null,
@@ -169,7 +167,7 @@ pub const DB = struct {
             return null;
         }
         return .{
-            .allocator = general_freer,
+            .free = rdb.rocksdb_free,
             .data = value[0..valueLength],
         };
     }
@@ -283,7 +281,7 @@ pub const DB = struct {
         );
         return .{
             .data = std.mem.span(value),
-            .allocator = general_freer,
+            .free = rdb.rocksdb_free,
         };
     }
 
@@ -384,7 +382,7 @@ const CallHandler = struct {
         if (self.err_str_in) |s| {
             self.err_str_out.* = .{
                 .data = std.mem.span(s),
-                .allocator = general_freer,
+                .free = rdb.rocksdb_free,
             };
             return err;
         } else {

@@ -122,7 +122,7 @@ pub const RawIterator = struct {
         const ret = rdb.rocksdb_iter_key(self.inner, &len);
         return .{
             .data = ret[0..len],
-            .allocator = general_freer,
+            .free = rdb.rocksdb_free,
         };
     }
 
@@ -131,7 +131,7 @@ pub const RawIterator = struct {
         const ret = rdb.rocksdb_iter_value(self.inner, &len);
         return .{
             .data = ret[0..len],
-            .allocator = general_freer,
+            .free = rdb.rocksdb_free,
         };
     }
 
@@ -149,7 +149,7 @@ pub const RawIterator = struct {
         if (err_str_in) |s| {
             err_str.* = .{
                 .data = std.mem.span(s),
-                .allocator = general_freer,
+                .free = rdb.rocksdb_free,
             };
             return error.RocksDBIterator;
         }
