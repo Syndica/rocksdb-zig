@@ -1,10 +1,10 @@
 .{
     .name = "rocksdb",
-    .version = "9.5.2",
+    .version = "9.7.4",
     .dependencies = .{
         .rocksdb = .{
-            .url = "https://github.com/Syndica/rocksdb/archive/a9c9eeec28ad8cb73b46b05d97695a2a1ff41512.tar.gz",
-            .hash = "1220dc54736c65c61ee181cd2716db055cb78131ebed2b88ccf4733f43d35ac39eeb",
+            .url = "https://github.com/facebook/rocksdb/archive/3c27a3dde0993210c5cc30d99717093f7537916f.tar.gz",
+            .hash = "1220af064eaae20142058adc238bb7d033328e069e66f1d4963654b5fc60e1adea48",
         },
     },
     .paths = .{
