@@ -3,8 +3,8 @@
     .version = "9.5.2",
     .dependencies = .{
         .rocksdb = .{
-            .url = "https://github.com/Syndica/rocksdb/archive/a9c9eeec28ad8cb73b46b05d97695a2a1ff41512.tar.gz",
-            .hash = "1220dc54736c65c61ee181cd2716db055cb78131ebed2b88ccf4733f43d35ac39eeb",
+            .url = "https://github.com/Syndica/rocksdb/archive/d879aa81f330eb9a5646e6c5d8317f092a7d114c.tar.gz",
+            .hash = "122043e5b3e4e5bc544774453dce561b03fb12ed6516bbb637d4bdabd9880273b296",
         },
     },
     .paths = .{
