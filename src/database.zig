@@ -246,6 +246,18 @@ pub const DB = struct {
         return ri;
     }
 
+    pub fn flush(
+        self: *const Self,
+        err_str: *?Data,
+    ) void {
+        var ch = CallHandler.init(err_str);
+        rdb.rocksdb_flush(
+            self.db,
+            rdb.rocksdb_flushoptions_create(),
+            &ch.err_str_in,
+        );
+    }
+
     pub fn liveFiles(self: *const Self, allocator: Allocator) Allocator.Error!std.ArrayList(LiveFile) {
         const files = rdb.rocksdb_livefiles(self.db).?;
         const num_files: usize = @intCast(rdb.rocksdb_livefiles_count(files));
@@ -481,6 +493,8 @@ fn runTest(err_str: *?Data) !void {
 
     const noval = try db.get(null, "hello", err_str);
     try std.testing.expect(null == noval);
+
+    db.flush(err_str);
 
     const lfs = try db.liveFiles(std.testing.allocator);
     defer lfs.deinit();
