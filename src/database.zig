@@ -250,12 +250,15 @@ pub const DB = struct {
         self: *const Self,
         err_str: *?Data,
     ) void {
+        const flush_options = rdb.rocksdb_flushoptions_create();
+        rdb.rocksdb_flushoptions_set_wait(flush_options, 1);
         var ch = CallHandler.init(err_str);
         rdb.rocksdb_flush(
             self.db,
-            rdb.rocksdb_flushoptions_create(),
+            flush_options,
             &ch.err_str_in,
         );
+        rdb.rocksdb_flush_wal(self.db, 1, &ch.err_str_in);
     }
 
     pub fn liveFiles(self: *const Self, allocator: Allocator) Allocator.Error!std.ArrayList(LiveFile) {
