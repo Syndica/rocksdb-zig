@@ -54,7 +54,7 @@ pub const DB = struct {
                 @ptrCast(cf_names.ptr),
                 @ptrCast(cf_options.ptr),
                 @ptrCast(cf_handles.ptr),
-                &ch.err_str_in,
+                @ptrCast(&ch.err_str_in),
             ), error.RocksDBOpen);
         };
 
@@ -108,8 +108,8 @@ pub const DB = struct {
         const handle = (try ch.handle(rdb.rocksdb_create_column_family(
             self.db,
             options,
-            @as([*c]const u8, @ptrCast(name)),
-            &ch.err_str_in,
+            @ptrCast(name),
+            @ptrCast(&ch.err_str_in),
         ), error.RocksDBCreateColumnFamily)).?;
         self.cf_name_to_handle.put(name, handle);
         return handle;
@@ -140,7 +140,7 @@ pub const DB = struct {
             key.len,
             value.ptr,
             value.len,
-            &ch.err_str_in,
+            @ptrCast(&ch.err_str_in),
         ), error.RocksDBPut);
     }
 
@@ -161,7 +161,7 @@ pub const DB = struct {
             key.ptr,
             key.len,
             &valueLength,
-            &ch.err_str_in,
+            @ptrCast(&ch.err_str_in),
         ), error.RocksDBGet);
         if (value == 0) {
             return null;
@@ -187,7 +187,7 @@ pub const DB = struct {
             column_family orelse self.default_cf,
             key.ptr,
             key.len,
-            &ch.err_str_in,
+            @ptrCast(&ch.err_str_in),
         ), error.RocksDBDelete);
     }
 
@@ -206,7 +206,7 @@ pub const DB = struct {
             start_key.len,
             @ptrCast(limit_key.ptr),
             limit_key.len,
-            &ch.err_str_in,
+            @ptrCast(&ch.err_str_in),
         ), error.RocksDBDeleteFilesInRange);
     }
 
@@ -297,7 +297,7 @@ pub const DB = struct {
             self.db,
             options,
             batch.inner,
-            &ch.err_str_in,
+            @ptrCast(&ch.err_str_in),
         ), error.RocksDBWrite);
     }
 
@@ -311,9 +311,9 @@ pub const DB = struct {
         var ch = CallHandler.init(err_str);
         const e = error.RocksDBFlush;
         if (column_family) |cf|
-            try ch.handle(rdb.rocksdb_flush_cf(self.db, options, cf, &ch.err_str_in), e)
+            try ch.handle(rdb.rocksdb_flush_cf(self.db, options, cf, @ptrCast(&ch.err_str_in)), e)
         else
-            try ch.handle(rdb.rocksdb_flush(self.db, options, &ch.err_str_in), e);
+            try ch.handle(rdb.rocksdb_flush(self.db, options, @ptrCast(&ch.err_str_in)), e);
     }
 };
 
@@ -374,7 +374,7 @@ test "DBOptions custom" {
 fn testDBOptions(test_subject: DBOptions, expected: *rdb.struct_rocksdb_options_t) !void {
     const actual = test_subject.convert();
 
-    inline for (@typeInfo(DBOptions).Struct.fields) |field| {
+    inline for (@typeInfo(DBOptions).@"struct".fields) |field| {
         const getter = "rocksdb_options_get_" ++ field.name;
         const expected_value = @call(.auto, @field(rdb, getter), .{expected});
         const actual_value = @call(.auto, @field(rdb, getter), .{actual});
@@ -434,16 +434,16 @@ const CallHandler = struct {
     /// The user's error string.
     err_str_out: *?Data,
 
-    fn init(err_str_out: *?Data) @This() {
+    fn init(err_str_out: *?Data) CallHandler {
         return .{ .err_str_out = err_str_out };
     }
 
-    fn errIn(self: *@This()) [*c][*c]u8 {
+    fn errIn(self: *CallHandler) [*c][*c]u8 {
         return @ptrCast(&self.err_str_in);
     }
 
     fn handle(
-        self: *@This(),
+        self: *CallHandler,
         ret: anytype,
         comptime err: anytype,
     ) @TypeOf(err)!@TypeOf(ret) {

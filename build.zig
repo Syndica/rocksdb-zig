@@ -13,7 +13,7 @@ pub fn build(b: *Build) void {
     const rocksdb_mod = addRocksDB(b, target, optimize);
 
     // zig bindings library to rocksdb
-    const bindings_mod = b.addModule("rocksdb-bindings", .{
+    const bindings_mod = b.addModule("bindings", .{
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/lib.zig"),
@@ -58,7 +58,7 @@ fn addRocksDB(
         .optimize = optimize,
     });
     const librocksdb_so = b.addSharedLibrary(.{
-        .name = "rocksdb",
+        .name = "rocksdb_shared",
         .target = target,
         .optimize = optimize,
     });
@@ -480,6 +480,12 @@ fn buildRocksDB(
         .include_path = "util/build_version.cc",
     }, .{
         .GIT_MOD = 1,
+        .GIT_SHA = null,
+        .GIT_TAG = null,
+        .GIT_DATE = null,
+        .BUILD_DATE = null,
+        .ROCKSDB_PLUGIN_EXTERNS = null,
+        .ROCKSDB_PLUGIN_BUILTINS = null,
     });
     librocksdb.addCSourceFile(.{ .file = build_version.getOutput() });
 
