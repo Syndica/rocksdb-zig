@@ -10,7 +10,7 @@ pub fn build(b: *Build) void {
     const test_step = b.step("test", "Run bindings tests");
 
     // rocksdb itself as a zig module
-    const rocksdb_mod = buildRocksDb(b, target, optimize);
+    const rocksdb_mod = addRocksDB(b, target, optimize);
 
     // zig bindings library to rocksdb
     const bindings_mod = b.addModule("rocksdb-bindings", .{
@@ -32,7 +32,7 @@ pub fn build(b: *Build) void {
 
 /// Create a zig module for the bare C++ library by exposing its C api.
 /// Builds rocksdb, links it, and translates its headers.
-fn buildRocksDb(
+fn addRocksDB(
     b: *Build,
     target: ResolvedTarget,
     optimize: OptimizeMode,
@@ -52,32 +52,41 @@ fn buildRocksDb(
         .link_libcpp = true,
     });
 
-    const librocksdb_a = try buildLibRocksDbStatic(b, target, optimize);
+    const librocksdb_a = b.addStaticLibrary(.{
+        .name = "rocksdb",
+        .target = target,
+        .optimize = optimize,
+    });
+    const librocksdb_so = b.addSharedLibrary(.{
+        .name = "rocksdb",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    try buildRocksDB(b, librocksdb_a, target);
+    try buildRocksDB(b, librocksdb_so, target);
+
     mod.addIncludePath(rocks_dep.path("include"));
     mod.linkLibrary(librocksdb_a);
 
     return mod;
 }
 
-fn buildLibRocksDbStatic(
+/// The build process for rocksdb itself. works for static or shared library
+fn buildRocksDB(
     b: *Build,
+    librocksdb: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-) !*Build.Step.Compile {
+) !void {
     const t = target.result;
     const rocks_dep = b.dependency("rocksdb", .{});
 
-    const librocksdb_a = b.addStaticLibrary(.{
-        .name = "rocksdb",
-        .target = target,
-        .optimize = optimize,
-    });
-    librocksdb_a.linkLibC();
-    librocksdb_a.linkLibCpp();
+    librocksdb.linkLibC();
+    librocksdb.linkLibCpp();
 
-    librocksdb_a.addIncludePath(rocks_dep.path("include"));
-    librocksdb_a.addIncludePath(rocks_dep.path("."));
-    librocksdb_a.addCSourceFiles(.{
+    librocksdb.addIncludePath(rocks_dep.path("include"));
+    librocksdb.addIncludePath(rocks_dep.path("."));
+    librocksdb.addCSourceFiles(.{
         .root = rocks_dep.path("."),
         .files = &.{
             "cache/cache.cc",
@@ -427,7 +436,7 @@ fn buildLibRocksDbStatic(
 
     // platform dependent stuff
     if (t.cpu.arch == .aarch64) {
-        librocksdb_a.addCSourceFile(.{
+        librocksdb.addCSourceFile(.{
             .file = rocks_dep.path("util/crc32c_arm64.cc"),
             .flags = &.{
                 "-std=c++17",
@@ -439,9 +448,9 @@ fn buildLibRocksDbStatic(
     }
 
     if (t.os.tag != .windows) {
-        librocksdb_a.root_module.addCMacro("ROCKSDB_PLATFORM_POSIX", "");
-        librocksdb_a.root_module.addCMacro("ROCKSDB_LIB_IO_POSIX", "");
-        librocksdb_a.addCSourceFiles(.{
+        librocksdb.root_module.addCMacro("ROCKSDB_PLATFORM_POSIX", "");
+        librocksdb.root_module.addCMacro("ROCKSDB_LIB_IO_POSIX", "");
+        librocksdb.addCSourceFiles(.{
             .root = rocks_dep.path("."),
             .files = &.{
                 "port/port_posix.cc",
@@ -464,7 +473,7 @@ fn buildLibRocksDbStatic(
         .linux => "OS_LINUX",
         else => std.debug.panic("TODO: support target OS '{s}'", .{@tagName(t.os.tag)}),
     };
-    librocksdb_a.root_module.addCMacro(os_name, "");
+    librocksdb.root_module.addCMacro(os_name, "");
 
     const build_version = b.addConfigHeader(.{
         .style = .{ .cmake = rocks_dep.path("util/build_version.cc.in") },
@@ -472,9 +481,7 @@ fn buildLibRocksDbStatic(
     }, .{
         .GIT_MOD = 1,
     });
-    librocksdb_a.addCSourceFile(.{ .file = build_version.getOutput() });
+    librocksdb.addCSourceFile(.{ .file = build_version.getOutput() });
 
-    b.installArtifact(librocksdb_a);
-
-    return librocksdb_a;
+    b.installArtifact(librocksdb);
 }
