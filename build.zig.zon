@@ -3,8 +3,13 @@
     .version = "9.7.4",
     .dependencies = .{
         .rocksdb = .{
+<<<<<<< Updated upstream
             .url = "https://github.com/Syndica/rocksdb/archive/3793e721c7795b338d9d7808544b75db6bde3548.tar.gz",
             .hash = "1220f93ed0f3a9f3cd0a39352c908af2cbcef0ab42f9fff76e3eb39aaaff5570e146",
+=======
+            .url = "https://github.com/Syndica/rocksdb/archive/d879aa81f330eb9a5646e6c5d8317f092a7d114c.tar.gz",
+            .hash = "122043e5b3e4e5bc544774453dce561b03fb12ed6516bbb637d4bdabd9880273b296",
+>>>>>>> Stashed changes
         },
     },
     .paths = .{

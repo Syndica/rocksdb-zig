@@ -7,27 +7,27 @@ pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const test_step = b.step("test", "Run bindings tests");
-
     // rocksdb itself as a zig module
     const rocksdb_mod = addRocksDB(b, target, optimize);
 
-    // zig bindings library to rocksdb
-    const bindings_mod = b.addModule("rocksdb-bindings", .{
+    const exe = b.addExecutable(.{
+        .name = "rocksdb_segfault",
+        .root_source_file = b.path("c-repro.zig"),
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("src/lib.zig"),
     });
-    bindings_mod.addImport("rocksdb", rocksdb_mod);
 
-    // tests
-    const tests = b.addTest(.{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("src/lib.zig"),
-    });
-    tests.root_module.addImport("rocksdb", rocksdb_mod);
-    test_step.dependOn(&b.addRunArtifact(tests).step);
+    exe.root_module.addImport("rocksdb", rocksdb_mod);
+    b.installArtifact(exe);
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_cmd.step);
 }
 
 /// Create a zig module for the bare C++ library by exposing its C api.
@@ -57,6 +57,7 @@ fn addRocksDB(
         .target = target,
         .optimize = optimize,
     });
+<<<<<<< Updated upstream
     const librocksdb_so = b.addSharedLibrary(.{
         .name = "rocksdb",
         .target = target,
@@ -68,6 +69,28 @@ fn addRocksDB(
 
     mod.addIncludePath(rocks_dep.path("include"));
     mod.linkLibrary(librocksdb_a);
+=======
+    const rocks_path = rocks_dep.path("");
+
+    const librocksdb_a = addMakeAndMove(b, make_and_move, rocks_path, "static_lib", "librocksdb.a");
+    const libbz2_a = addMakeAndMove(b, make_and_move, rocks_path, "libbz2.a", "libbz2.a");
+    const libz_a = addMakeAndMove(b, make_and_move, rocks_path, "libz.a", "libz.a");
+    const libzstd_a = addMakeAndMove(b, make_and_move, rocks_path, "libzstd.a", "libzstd.a");
+    const libsnappy_a = addMakeAndMove(b, make_and_move, rocks_path, "libsnappy.a", "libsnappy.a");
+    const liblz4_a = addMakeAndMove(b, make_and_move, rocks_path, "liblz4.a", "liblz4.a");
+
+    mod.addIncludePath(rocks_dep.path("include"));
+
+    mod.addObjectFile(librocksdb_a);
+    mod.addObjectFile(libbz2_a);
+    mod.addObjectFile(libz_a);
+    mod.addObjectFile(libzstd_a);
+    mod.addObjectFile(libsnappy_a);
+    mod.addObjectFile(liblz4_a);
+    mod.addObjectFile(.{ .cwd_relative = "/usr/lib/libstdc++.a" });
+
+    // mod.linkSystemLibrary("", options: LinkSystemLibraryOptions)
+>>>>>>> Stashed changes
 
     return mod;
 }
