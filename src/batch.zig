@@ -16,7 +16,7 @@ pub const WriteBatch = struct {
     }
 
     pub fn deinit(self: WriteBatch) void {
-        rdb.rocksdb_free(self.inner);
+        rdb.rocksdb_writebatch_destroy(self.inner);
     }
 
     pub fn put(
