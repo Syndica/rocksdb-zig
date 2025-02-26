@@ -303,16 +303,69 @@ pub const DB = struct {
 };
 
 pub const DBOptions = struct {
+    /// If true, the database will be created if it is missing.
+    /// Default: false
     create_if_missing: bool = false,
+
+    /// If true, missing column families will be automatically created on
+    /// DB::Open().
+    /// Default: false
     create_missing_column_families: bool = false,
+
+    /// Number of open files that can be used by the DB.  You may need to
+    /// increase this if your database has a large working set. Value -1 means
+    /// files opened are always kept open. You can estimate number of files based
+    /// on target_file_size_base and target_file_size_multiplier for level-based
+    /// compaction. For universal-style compaction, you can usually set it to -1.
+    ///
+    /// A high value or -1 for this option can cause high memory usage.
+    /// See BlockBasedTableOptions::cache_usage_options to constrain
+    /// memory usage in case of block based table format.
+    ///
+    /// Default: -1
+    ///
+    /// Dynamically changeable through SetDBOptions() API.
+    max_open_files: i32 = -1,
 
     fn convert(do: DBOptions) *rdb.struct_rocksdb_options_t {
         const ro = rdb.rocksdb_options_create().?;
-        if (do.create_if_missing) rdb.rocksdb_options_set_create_if_missing(ro, 1);
-        if (do.create_missing_column_families) rdb.rocksdb_options_set_create_missing_column_families(ro, 1);
+        rdb.rocksdb_options_set_create_if_missing(ro, @intFromBool(do.create_if_missing));
+        rdb.rocksdb_options_set_create_missing_column_families(ro, @intFromBool(do.create_if_missing));
+        rdb.rocksdb_options_set_max_open_files(ro, do.max_open_files);
+
         return ro;
     }
 };
+
+test "DBOptions defaults" {
+    try testDBOptions(DBOptions{}, rdb.rocksdb_options_create().?);
+}
+
+test "DBOptions custom" {
+    const subject = DBOptions{
+        .create_if_missing = true,
+        .create_missing_column_families = true,
+        .max_open_files = 1234,
+    };
+
+    const expected = rdb.rocksdb_options_create().?;
+    rdb.rocksdb_options_set_create_if_missing(expected, 1);
+    rdb.rocksdb_options_set_create_missing_column_families(expected, 1);
+    rdb.rocksdb_options_set_max_open_files(expected, 1234);
+
+    try testDBOptions(subject, expected);
+}
+
+fn testDBOptions(test_subject: DBOptions, expected: *rdb.struct_rocksdb_options_t) !void {
+    const actual = test_subject.convert();
+
+    inline for (@typeInfo(DBOptions).Struct.fields) |field| {
+        const getter = "rocksdb_options_get_" ++ field.name;
+        const expected_value = @call(.auto, @field(rdb, getter), .{expected});
+        const actual_value = @call(.auto, @field(rdb, getter), .{actual});
+        try std.testing.expectEqual(expected_value, actual_value);
+    }
+}
 
 pub const ColumnFamilyDescription = struct {
     name: []const u8,
