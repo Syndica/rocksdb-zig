@@ -300,6 +300,21 @@ pub const DB = struct {
             &ch.err_str_in,
         ), error.RocksDBWrite);
     }
+
+    pub fn flush(
+        self: *const Self,
+        column_family: ?ColumnFamilyHandle,
+        err_str: *?Data,
+    ) error{RocksDBFlush}!void {
+        const options = rdb.rocksdb_flushoptions_create();
+        defer rdb.rocksdb_flushoptions_destroy(options);
+        var ch = CallHandler.init(err_str);
+        const e = error.RocksDBFlush;
+        if (column_family) |cf|
+            try ch.handle(rdb.rocksdb_flush_cf(self.db, cf, options, &ch.err_str_in), e)
+        else
+            try ch.handle(rdb.rocksdb_flush(self.db, options, &ch.err_str_in), e);
+    }
 };
 
 pub const DBOptions = struct {
