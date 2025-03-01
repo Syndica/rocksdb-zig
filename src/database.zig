@@ -311,7 +311,7 @@ pub const DB = struct {
         var ch = CallHandler.init(err_str);
         const e = error.RocksDBFlush;
         if (column_family) |cf|
-            try ch.handle(rdb.rocksdb_flush_cf(self.db, cf, options, &ch.err_str_in), e)
+            try ch.handle(rdb.rocksdb_flush_cf(self.db, options, cf, &ch.err_str_in), e)
         else
             try ch.handle(rdb.rocksdb_flush(self.db, options, &ch.err_str_in), e);
     }
