@@ -7,12 +7,8 @@ pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const test_step = b.step("test", "Run bindings tests");
-
-    // rocksdb itself as a zig module
+    // RocksDB's translate-c module
     const rocksdb_mod = addRocksDB(b, target, optimize);
-
-    // zig bindings library to rocksdb
     const bindings_mod = b.addModule("bindings", .{
         .target = target,
         .optimize = optimize,
@@ -20,12 +16,12 @@ pub fn build(b: *Build) void {
     });
     bindings_mod.addImport("rocksdb", rocksdb_mod);
 
-    // tests
     const tests = b.addTest(.{
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/lib.zig"),
     });
+    const test_step = b.step("test", "Run bindings tests");
     tests.root_module.addImport("rocksdb", rocksdb_mod);
     test_step.dependOn(&b.addRunArtifact(tests).step);
 }
@@ -52,22 +48,31 @@ fn addRocksDB(
         .link_libcpp = true,
     });
 
-    const librocksdb_a = b.addStaticLibrary(.{
+    const force_pic = b.option(bool, "force_pic", "Forces PIC for the libraries");
+    const static_rocksdb = b.addLibrary(.{
         .name = "rocksdb",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .pic = force_pic,
+        }),
     });
-    const librocksdb_so = b.addSharedLibrary(.{
+    const dynamic_rocksdb = b.addLibrary(.{
         .name = "rocksdb_shared",
-        .target = target,
-        .optimize = optimize,
+        .linkage = .dynamic,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .pic = force_pic,
+        }),
     });
 
-    try buildRocksDB(b, librocksdb_a, target);
-    try buildRocksDB(b, librocksdb_so, target);
+    try buildRocksDB(b, static_rocksdb, target);
+    try buildRocksDB(b, dynamic_rocksdb, target);
 
     mod.addIncludePath(rocks_dep.path("include"));
-    mod.linkLibrary(librocksdb_a);
+    mod.linkLibrary(static_rocksdb);
 
     return mod;
 }
