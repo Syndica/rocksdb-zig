@@ -46,11 +46,11 @@ $ zig fetch --save=rocksdb https://github.com/Syndica/rocksdb-zig/archive/<COMMI
 
 Add the import to a module:
 ```zig
-const rocksdb_bindings = b.dependency("rocksdb", .{}).module("rocksdb-bindings");
-exe.root_module.addImport("rocksdb-bindings", rocksdb_bindings);
+const bindings = b.dependency("rocksdb", .{}).module("bindings");
+exe.root_module.addImport("rocksdb", bindings);
 ```
 
-Import the `rocksdb-bindings` module.
+Import the `rocksdb` module.
 ```zig
-const rocksdb = @import("rocksdb-bindings");
+const rocksdb = @import("rocksdb");
 ```
