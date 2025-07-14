@@ -48,14 +48,14 @@ fn addRocksDB(
         .link_libcpp = true,
     });
 
-    const force_pic = b.option(bool, "force_pic", "Forces PIC for the libraries");
+    const force_pic = b.option(bool, "force_pic", "Forces PIC enabled for the libraries");
     const static_rocksdb = b.addLibrary(.{
         .name = "rocksdb",
         .linkage = .static,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            .pic = force_pic,
+            .pic = if (force_pic == true) true else null,
         }),
     });
     const dynamic_rocksdb = b.addLibrary(.{
@@ -64,7 +64,7 @@ fn addRocksDB(
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            .pic = force_pic,
+            .pic = if (force_pic == true) true else null,
         }),
     });
 
