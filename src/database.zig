@@ -246,14 +246,18 @@ pub const DB = struct {
         return ri;
     }
 
-    pub fn liveFiles(self: *const Self, allocator: Allocator) Allocator.Error!std.ArrayList(LiveFile) {
+    pub fn liveFiles(self: *const Self, allocator: Allocator) Allocator.Error![]const LiveFile {
         const files = rdb.rocksdb_livefiles(self.db).?;
+        defer rdb.rocksdb_livefiles_destroy(files);
         const num_files: usize = @intCast(rdb.rocksdb_livefiles_count(files));
-        var livefiles = std.ArrayList(LiveFile).init(allocator);
+
+        var livefiles: std.ArrayList(LiveFile) = .empty;
+        defer livefiles.deinit(allocator);
+
         var key_size: usize = 0;
         for (0..num_files) |i| {
             const file_num: c_int = @intCast(i);
-            try livefiles.append(.{
+            try livefiles.append(allocator, .{
                 .allocator = allocator,
                 .column_family_name = try copy(allocator, rdb.rocksdb_livefiles_column_family_name(files, file_num)),
                 .name = try copy(allocator, rdb.rocksdb_livefiles_name(files, file_num)),
@@ -265,8 +269,8 @@ pub const DB = struct {
                 .num_deletions = rdb.rocksdb_livefiles_deletions(files, file_num),
             });
         }
-        rdb.rocksdb_livefiles_destroy(files);
-        return livefiles;
+
+        return try livefiles.toOwnedSlice(allocator);
     }
 
     pub fn propertyValueCf(
@@ -506,15 +510,17 @@ test DB {
     var err_str: ?Data = null;
     defer if (err_str) |e| e.deinit();
     runTest(&err_str) catch |e| {
-        std.debug.print("{}: {?}\n", .{ e, err_str });
+        std.debug.print("{}: {?f}\n", .{ e, err_str });
         return e;
     };
 }
 
 fn runTest(err_str: *?Data) !void {
+    const allocator = std.testing.allocator;
+
     {
         var db, const families = try DB.open(
-            std.testing.allocator,
+            allocator,
             "test-state",
             .{
                 .create_if_missing = true,
@@ -527,7 +533,7 @@ fn runTest(err_str: *?Data) !void {
             err_str,
         );
         defer db.deinit();
-        defer std.testing.allocator.free(families);
+        defer allocator.free(families);
         const a_family = families[1].handle;
 
         _ = try db.put(a_family, "hello", "world", err_str);
@@ -553,7 +559,7 @@ fn runTest(err_str: *?Data) !void {
     }
 
     var db, const families = try DB.open(
-        std.testing.allocator,
+        allocator,
         "test-state",
         .{
             .create_if_missing = true,
@@ -566,9 +572,12 @@ fn runTest(err_str: *?Data) !void {
         err_str,
     );
     defer db.deinit();
-    defer std.testing.allocator.free(families);
-    const lfs = try db.liveFiles(std.testing.allocator);
-    defer lfs.deinit();
-    defer for (lfs.items) |lf| lf.deinit();
-    try std.testing.expect(std.mem.eql(u8, "another", lfs.items[0].column_family_name));
+    defer allocator.free(families);
+
+    const lfs = try db.liveFiles(allocator);
+    defer {
+        for (lfs) |lf| lf.deinit();
+        allocator.free(lfs);
+    }
+    try std.testing.expect(std.mem.eql(u8, "another", lfs[0].column_family_name));
 }
