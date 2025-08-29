@@ -1,7 +1,8 @@
-name: check
-
-on: push
-
+on:
+    pull_request:
+    push:
+      branches:
+        - master 
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -10,9 +11,9 @@ jobs:
         uses: actions/checkout@v2
         
       - name: setup-zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.0
+          version: 0.15.1
 
       - name: lint
         run: |
@@ -27,13 +28,11 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v2
-        with:
-          submodules: recursive
 
       - name: setup-zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.0
+          version: 0.15.1
 
       - name: test
         run: |
