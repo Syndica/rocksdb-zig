@@ -16,11 +16,7 @@ pub fn build(b: *Build) void {
     });
     bindings_mod.addImport("rocksdb", rocksdb_mod);
 
-    const tests = b.addTest(.{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("src/lib.zig"),
-    });
+    const tests = b.addTest(.{ .root_module = bindings_mod });
     const test_step = b.step("test", "Run bindings tests");
     tests.root_module.addImport("rocksdb", rocksdb_mod);
     test_step.dependOn(&b.addRunArtifact(tests).step);

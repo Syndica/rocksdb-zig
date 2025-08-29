@@ -2,7 +2,7 @@ Build and use RocksDB in zig.
 
 # Build Dependencies
 
-`rocksdb-zig` is pinned to [Zig `0.13`](https://ziglang.org/download/), so you will need to have it installed.
+`rocksdb-zig` is pinned to [Zig `0.15`](https://ziglang.org/download/), so you will need to have it installed.
 
 # Usage
 
