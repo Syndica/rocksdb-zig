@@ -7,6 +7,11 @@
             .url = "git+https://github.com/Syndica/rocksdb#3793e721c7795b338d9d7808544b75db6bde3548",
             .hash = "N-V-__8AAAKhcQL5PtDzqfPNCjk1LJCK8svO8KtC-f_3bj6z",
         },
+        .snappy = .{
+            .url = "git+https://github.com/google/snappy#25e52c58fbf83ee40f4c9284f757f777f691f76f",
+            .hash = "N-V-__8AADcwMwCa__yeHfNDwYl4KEDbkj-VwAqY844Nblr8",
+            .lazy = true,
+        },
     },
     .minimum_zig_version = "0.15.0",
     .paths = .{

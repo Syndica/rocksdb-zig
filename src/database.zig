@@ -26,6 +26,7 @@ pub const DB = struct {
         dir: []const u8,
         db_options: DBOptions,
         maybe_column_families: ?[]const ColumnFamilyDescription,
+        for_read_only: bool,
         err_str: *?Data,
     ) (Allocator.Error || error{RocksDBOpen})!struct { Self, []const ColumnFamily } {
         const column_families = if (maybe_column_families) |cfs|
@@ -47,15 +48,30 @@ pub const DB = struct {
                 cf_options[i] = cf.options.convert();
             }
             var ch = CallHandler.init(err_str);
-            break :db try ch.handle(rdb.rocksdb_open_column_families(
-                db_options.convert(),
-                dir.ptr,
-                @intCast(cf_names.len),
-                @ptrCast(cf_names.ptr),
-                @ptrCast(cf_options.ptr),
-                @ptrCast(cf_handles.ptr),
-                @ptrCast(&ch.err_str_in),
-            ), error.RocksDBOpen);
+
+            const ret = if (for_read_only)
+                rdb.rocksdb_open_for_read_only_column_families(
+                    db_options.convert(),
+                    dir.ptr,
+                    @intCast(cf_names.len),
+                    @ptrCast(cf_names.ptr),
+                    @ptrCast(cf_options.ptr),
+                    @ptrCast(cf_handles.ptr),
+                    0,
+                    @ptrCast(&ch.err_str_in),
+                )
+            else
+                rdb.rocksdb_open_column_families(
+                    db_options.convert(),
+                    dir.ptr,
+                    @intCast(cf_names.len),
+                    @ptrCast(cf_names.ptr),
+                    @ptrCast(cf_options.ptr),
+                    @ptrCast(cf_handles.ptr),
+                    @ptrCast(&ch.err_str_in),
+                );
+
+            break :db try ch.handle(ret, error.RocksDBOpen);
         };
 
         // organize column family metadata
@@ -65,6 +81,7 @@ pub const DB = struct {
         errdefer cf_map.destroy();
         for (cf_list, 0..) |*cf, i| {
             const name = try allocator.dupe(u8, column_families[i].name);
+            errdefer allocator.free(name);
             cf.* = .{
                 .name = name,
                 .handle = cf_handles[i].?,
@@ -356,6 +373,36 @@ pub const DBOptions = struct {
     }
 };
 
+test "DB clean init and deinit" {
+    const ns = struct {
+        pub fn run(allocator: Allocator) !void {
+            var dir = std.testing.tmpDir(.{});
+            defer dir.cleanup();
+            const path = try dir.dir.realpathAlloc(allocator, ".");
+            defer allocator.free(path);
+
+            var data: ?Data = null;
+            const db, const cfs = try DB.open(
+                allocator,
+                path,
+                .{
+                    .create_if_missing = true,
+                    .create_missing_column_families = true,
+                },
+                null,
+                false,
+                &data,
+            );
+
+            db.deinit();
+            allocator.free(cfs);
+        }
+    };
+
+    try ns.run(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, ns.run, .{});
+}
+
 test "DBOptions defaults" {
     try testDBOptions(DBOptions{}, rdb.rocksdb_options_create().?);
 }
@@ -530,6 +577,7 @@ fn runTest(err_str: *?Data) !void {
                 .{ .name = "default" },
                 .{ .name = "another" },
             },
+            false,
             err_str,
         );
         defer db.deinit();
@@ -569,6 +617,7 @@ fn runTest(err_str: *?Data) !void {
             .{ .name = "default" },
             .{ .name = "another" },
         },
+        false,
         err_str,
     );
     defer db.deinit();

@@ -3,12 +3,18 @@ const Build = std.Build;
 const ResolvedTarget = Build.ResolvedTarget;
 const OptimizeMode = std.builtin.OptimizeMode;
 
-pub fn build(b: *Build) void {
+pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const enable_snappy = b.option(
+        bool,
+        "enable_snappy",
+        "Enables and builds with the Snappy compressor",
+    ) orelse false;
+
     // RocksDB's translate-c module
-    const rocksdb_mod = addRocksDB(b, target, optimize);
+    const rocksdb_mod = try addRocksDB(b, target, optimize, enable_snappy);
     const bindings_mod = b.addModule("bindings", .{
         .target = target,
         .optimize = optimize,
@@ -28,7 +34,8 @@ fn addRocksDB(
     b: *Build,
     target: ResolvedTarget,
     optimize: OptimizeMode,
-) *Build.Module {
+    enable_snappy: bool,
+) !*Build.Module {
     const rocks_dep = b.dependency("rocksdb", .{});
 
     const translate_c = b.addTranslateC(.{
@@ -64,8 +71,18 @@ fn addRocksDB(
         }),
     });
 
-    try buildRocksDB(b, static_rocksdb, target);
-    try buildRocksDB(b, dynamic_rocksdb, target);
+    const maybe_libsnappy = if (enable_snappy) b.addLibrary(.{
+        .name = "snappy",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .pic = if (force_pic == true) true else null,
+        }),
+    }) else null;
+
+    try buildRocksDB(b, static_rocksdb, maybe_libsnappy, target);
+    try buildRocksDB(b, dynamic_rocksdb, maybe_libsnappy, target);
 
     mod.addIncludePath(rocks_dep.path("include"));
     mod.linkLibrary(static_rocksdb);
@@ -77,6 +94,7 @@ fn addRocksDB(
 fn buildRocksDB(
     b: *Build,
     librocksdb: *std.Build.Step.Compile,
+    maybe_libsnappy: ?*std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
 ) !void {
     const t = target.result;
@@ -84,6 +102,16 @@ fn buildRocksDB(
 
     librocksdb.linkLibC();
     librocksdb.linkLibCpp();
+
+    var rocksdb_flags: std.ArrayListUnmanaged([]const u8) = .empty;
+    defer rocksdb_flags.deinit(b.allocator);
+    try rocksdb_flags.appendSlice(b.allocator, &.{
+        "-std=c++17",
+        "-faligned-new",
+        "-DHAVE_ALIGNED_NEW",
+        "-DROCKSDB_UBSAN_RUN",
+    });
+    if (maybe_libsnappy != null) try rocksdb_flags.append(b.allocator, "-DSNAPPY=1");
 
     librocksdb.addIncludePath(rocks_dep.path("include"));
     librocksdb.addIncludePath(rocks_dep.path("."));
@@ -427,24 +455,55 @@ fn buildRocksDB(
             "utilities/transactions/lock/range/range_tree/lib/util/dbt.cc",
             "utilities/transactions/lock/range/range_tree/lib/util/memarena.cc",
         },
-        .flags = &.{
-            "-std=c++17",
-            "-faligned-new",
-            "-DHAVE_ALIGNED_NEW",
-            "-DROCKSDB_UBSAN_RUN",
-        },
+        .flags = rocksdb_flags.items,
     });
+
+    if (maybe_libsnappy) |libsnappy| not_yet_fetched: {
+        const snappy_dep = b.lazyDependency("snappy", .{}) orelse
+            break :not_yet_fetched;
+
+        librocksdb.linkLibrary(libsnappy);
+        librocksdb.addIncludePath(snappy_dep.path("."));
+
+        libsnappy.linkLibCpp();
+
+        const flags = .{
+            "-std=c++11",
+            "-fno-exceptions",
+            "-fno-rtti",
+            "-Wno-sign-compare",
+        };
+
+        libsnappy.addCSourceFiles(.{
+            .root = snappy_dep.path("."),
+            .files = &.{
+                "snappy-c.cc",
+                "snappy-sinksource.cc",
+                "snappy-stubs-internal.cc",
+                "snappy.cc",
+            },
+            .flags = &flags,
+        });
+
+        const build_version = b.addConfigHeader(.{
+            .style = .{ .cmake = snappy_dep.path("snappy-stubs-public.h.in") },
+            .include_path = "snappy-stubs-public.h",
+        }, .{
+            .PROJECT_VERSION_MAJOR = 1,
+            .PROJECT_VERSION_MINOR = 2,
+            .PROJECT_VERSION_PATCH = 2,
+            .HAVE_SYS_UIO_H_01 = 1,
+        });
+
+        libsnappy.addIncludePath(build_version.getOutput().dirname());
+        librocksdb.addIncludePath(build_version.getOutput().dirname());
+    }
 
     // platform dependent stuff
     if (t.cpu.arch == .aarch64) {
         librocksdb.addCSourceFile(.{
             .file = rocks_dep.path("util/crc32c_arm64.cc"),
-            .flags = &.{
-                "-std=c++17",
-                "-faligned-new",
-                "-DHAVE_ALIGNED_NEW",
-                "-DROCKSDB_UBSAN_RUN",
-            },
+            .flags = rocksdb_flags.items,
         });
     }
 
@@ -459,11 +518,7 @@ fn buildRocksDB(
                 "env/fs_posix.cc",
                 "env/io_posix.cc",
             },
-            .flags = &.{
-                "-std=c++17",
-                "-faligned-new",
-                "-DHAVE_ALIGNED_NEW",
-            },
+            .flags = rocksdb_flags.items,
         });
     } else {
         @panic("TODO: support windows!");
