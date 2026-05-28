@@ -3,7 +3,7 @@ const rdb = @import("rocksdb");
 const lib = @import("lib.zig");
 
 const Allocator = std.mem.Allocator;
-const RwLock = std.Thread.RwLock;
+const RwLock = std.Io.RwLock;
 
 const Data = lib.Data;
 const Iterator = lib.Iterator;
@@ -105,8 +105,15 @@ pub const DB = struct {
 
     /// Closes the database and cleans up this struct's state.
     pub fn deinit(self: Self) void {
+        rdb.rocksdb_cancel_all_background_work(self.db, 1);
         self.cf_name_to_handle.destroy();
         rdb.rocksdb_close(self.db);
+    }
+
+    /// cancel all currently running background processes. if wait is true, wait
+    /// for all background work to be cancelled before returning.
+    pub fn cancelAllBackgroundWork(self: *const Self, wait: bool) void {
+        rdb.rocksdb_cancel_all_background_work(self.db, if (wait) 1 else 0);
     }
 
     /// Delete the entire database from the filesystem.
@@ -117,6 +124,7 @@ pub const DB = struct {
 
     pub fn createColumnFamily(
         self: *Self,
+        io: std.Io,
         name: []const u8,
         err_str: *?Data,
     ) !ColumnFamilyHandle {
@@ -128,15 +136,16 @@ pub const DB = struct {
             @ptrCast(name),
             @ptrCast(&ch.err_str_in),
         ), error.RocksDBCreateColumnFamily)).?;
-        self.cf_name_to_handle.put(name, handle);
+        self.cf_name_to_handle.put(io, name, handle);
         return handle;
     }
 
     pub fn columnFamily(
         self: *const Self,
+        io: std.Io,
         cf_name: []const u8,
     ) error{UnknownColumnFamily}!ColumnFamilyHandle {
-        return self.cf_name_to_handle.get(cf_name) orelse error.UnknownColumnFamily;
+        return self.cf_name_to_handle.get(io, cf_name) orelse error.UnknownColumnFamily;
     }
 
     pub fn put(
@@ -378,7 +387,7 @@ test "DB clean init and deinit" {
         pub fn run(allocator: Allocator) !void {
             var dir = std.testing.tmpDir(.{});
             defer dir.cleanup();
-            const path = try dir.dir.realpathAlloc(allocator, ".");
+            const path = try dir.dir.realPathFileAlloc(std.testing.io, ".", allocator);
             defer allocator.free(path);
 
             var data: ?Data = null;
@@ -522,7 +531,7 @@ const CfNameToHandleMap = struct {
         self.* = .{
             .allocator = allocator,
             .map = .{},
-            .lock = .{},
+            .lock = .init,
         };
         return self;
     }
@@ -537,18 +546,18 @@ const CfNameToHandleMap = struct {
         self.allocator.destroy(self);
     }
 
-    fn put(self: *Self, name: []const u8, handle: ColumnFamilyHandle) Allocator.Error!void {
+    fn put(self: *Self, io: std.Io, name: []const u8, handle: ColumnFamilyHandle) Allocator.Error!void {
         const owned_name = try self.allocator.dupe(u8, name);
 
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.lock.lockUncancelable(io);
+        defer self.lock.unlock(io);
 
         self.map.put(self.allocator, owned_name, handle);
     }
 
-    fn get(self: *Self, name: []const u8) ?ColumnFamilyHandle {
-        self.lock.lockShared();
-        defer self.lock.unlockShared();
+    fn get(self: *Self, io: std.Io, name: []const u8) ?ColumnFamilyHandle {
+        self.lock.lockSharedUncancelable(io);
+        defer self.lock.unlockShared(io);
         return self.map.get(name);
     }
 };

@@ -22,7 +22,7 @@ pub fn build(b: *Build) !void {
     });
     bindings_mod.addImport("rocksdb", rocksdb_mod);
 
-    const tests = b.addTest(.{ .root_module = bindings_mod });
+    const tests = b.addTest(.{ .root_module = bindings_mod, .use_llvm = true });
     const test_step = b.step("test", "Run bindings tests");
     tests.root_module.addImport("rocksdb", rocksdb_mod);
     test_step.dependOn(&b.addRunArtifact(tests).step);
@@ -100,8 +100,8 @@ fn buildRocksDB(
     const t = target.result;
     const rocks_dep = b.dependency("rocksdb", .{});
 
-    librocksdb.linkLibC();
-    librocksdb.linkLibCpp();
+    librocksdb.root_module.link_libc = true;
+    librocksdb.root_module.link_libcpp = true;
 
     var rocksdb_flags: std.ArrayListUnmanaged([]const u8) = .empty;
     defer rocksdb_flags.deinit(b.allocator);
@@ -113,9 +113,9 @@ fn buildRocksDB(
     });
     if (maybe_libsnappy != null) try rocksdb_flags.append(b.allocator, "-DSNAPPY=1");
 
-    librocksdb.addIncludePath(rocks_dep.path("include"));
-    librocksdb.addIncludePath(rocks_dep.path("."));
-    librocksdb.addCSourceFiles(.{
+    librocksdb.root_module.addIncludePath(rocks_dep.path("include"));
+    librocksdb.root_module.addIncludePath(rocks_dep.path("."));
+    librocksdb.root_module.addCSourceFiles(.{
         .root = rocks_dep.path("."),
         .files = &.{
             "cache/cache.cc",
@@ -462,10 +462,10 @@ fn buildRocksDB(
         const snappy_dep = b.lazyDependency("snappy", .{}) orelse
             break :not_yet_fetched;
 
-        librocksdb.linkLibrary(libsnappy);
-        librocksdb.addIncludePath(snappy_dep.path("."));
+        librocksdb.root_module.linkLibrary(libsnappy);
+        librocksdb.root_module.addIncludePath(snappy_dep.path("."));
 
-        libsnappy.linkLibCpp();
+        libsnappy.root_module.link_libcpp = true;
 
         const flags = .{
             "-std=c++11",
@@ -474,7 +474,7 @@ fn buildRocksDB(
             "-Wno-sign-compare",
         };
 
-        libsnappy.addCSourceFiles(.{
+        libsnappy.root_module.addCSourceFiles(.{
             .root = snappy_dep.path("."),
             .files = &.{
                 "snappy-c.cc",
@@ -495,13 +495,13 @@ fn buildRocksDB(
             .HAVE_SYS_UIO_H_01 = 1,
         });
 
-        libsnappy.addIncludePath(build_version.getOutput().dirname());
-        librocksdb.addIncludePath(build_version.getOutput().dirname());
+        libsnappy.root_module.addIncludePath(build_version.getOutputFile().dirname());
+        librocksdb.root_module.addIncludePath(build_version.getOutputFile().dirname());
     }
 
     // platform dependent stuff
     if (t.cpu.arch == .aarch64) {
-        librocksdb.addCSourceFile(.{
+        librocksdb.root_module.addCSourceFile(.{
             .file = rocks_dep.path("util/crc32c_arm64.cc"),
             .flags = rocksdb_flags.items,
         });
@@ -510,7 +510,7 @@ fn buildRocksDB(
     if (t.os.tag != .windows) {
         librocksdb.root_module.addCMacro("ROCKSDB_PLATFORM_POSIX", "");
         librocksdb.root_module.addCMacro("ROCKSDB_LIB_IO_POSIX", "");
-        librocksdb.addCSourceFiles(.{
+        librocksdb.root_module.addCSourceFiles(.{
             .root = rocks_dep.path("."),
             .files = &.{
                 "port/port_posix.cc",
@@ -543,7 +543,7 @@ fn buildRocksDB(
         .ROCKSDB_PLUGIN_EXTERNS = null,
         .ROCKSDB_PLUGIN_BUILTINS = null,
     });
-    librocksdb.addCSourceFile(.{ .file = build_version.getOutput() });
+    librocksdb.root_module.addCSourceFile(.{ .file = build_version.getOutputFile() });
 
     b.installArtifact(librocksdb);
 }

@@ -2,3 +2,4 @@
 /zig-out
 /test-state
 /.vscode
+zig-pkg/
